@@ -1,0 +1,15 @@
+[tools]
+go = "1"
+golangci-lint = "latest"
+
+[tasks.build]
+description = "Build the project into ~/.local/bin/lazy-mcp"
+run = ["mise run test", "go build -o ~/.local/bin/lazy-mcp ."]
+
+[tasks.test]
+description = "Run vet, lint, and unit tests"
+run = ["go vet ./...", "golangci-lint run ./...", "go test ./..."]
+
+[tasks.edit]
+description = "Edit mise file"
+run = "$EDITOR mise.toml"
