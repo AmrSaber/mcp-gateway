@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/spf13/cobra v1.10.2
+	github.com/tidwall/jsonc v0.3.3
 	gopkg.in/yaml.v3 v3.0.1
 )
 

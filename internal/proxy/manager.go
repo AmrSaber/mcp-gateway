@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -371,16 +372,19 @@ func (Mgr *Manager) ensure(Ctx context.Context, Name string) (*Downstream, error
 	return Down, nil
 }
 
-// connect spawns the subprocess, performs the MCP handshake, and lists tools.
+// connect performs the MCP handshake and lists tools over the server's
+// transport: a spawned stdio subprocess for local servers, or streamable HTTP
+// for remote (URL) servers.
 func connect(Ctx context.Context, Name string, Srv ServerConfig) (*Downstream, error) {
 	ConnectCtx, Cancel := context.WithTimeout(Ctx, Srv.Timeout.OrDefault())
 	defer Cancel()
 
-	Cmd := exec.CommandContext(Ctx, Srv.Command[0], Srv.Command[1:]...)
-	Cmd.Env = mergeEnv(Srv.Environment)
+	Transport, Err := transportFor(Ctx, Srv.Server)
+	if Err != nil {
+		return nil, fmt.Errorf("configuring transport for %q: %w", Name, Err)
+	}
 
 	Client := mcp.NewClient(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
-	Transport := &mcp.CommandTransport{Command: Cmd}
 
 	Session, Err := Client.Connect(ConnectCtx, Transport, nil)
 	if Err != nil {
@@ -399,4 +403,35 @@ func connect(Ctx context.Context, Name string, Srv ServerConfig) (*Downstream, e
 		Session: Session,
 		Tools:   Listed.Tools,
 	}, nil
+}
+
+// transportFor builds the MCP transport for a server spec: a CommandTransport
+// spawning a stdio subprocess for local servers, or a StreamableClientTransport
+// for remote (URL) servers.
+//
+// It resolves {env:...}/{cmd:...} interpolation in two phases (see interpolate):
+// Environment values are resolved first against the process env, the resolved
+// map is then merged over the process env, and that merged env is used both as
+// the subprocess environment and as the resolution source for the remaining
+// values (command args, headers, oauth). This lets a header reference an
+// environment value that is itself computed by a {cmd:...}.
+func transportFor(Ctx context.Context, Spec ServerSpec) (mcp.Transport, error) {
+	ResolvedEnv, Err := interpolateMap(Ctx, Spec.Environment, os.Environ())
+	if Err != nil {
+		return nil, fmt.Errorf("resolving environment: %w", Err)
+	}
+	Merged := mergeEnv(ResolvedEnv)
+
+	if Spec.IsRemote() {
+		return remoteTransport(Ctx, Spec, Merged)
+	}
+
+	Args, Err := interpolateSlice(Ctx, Spec.Command, Merged)
+	if Err != nil {
+		return nil, fmt.Errorf("resolving command: %w", Err)
+	}
+
+	Cmd := exec.CommandContext(Ctx, Args[0], Args[1:]...)
+	Cmd.Env = Merged
+	return &mcp.CommandTransport{Command: Cmd}, nil
 }

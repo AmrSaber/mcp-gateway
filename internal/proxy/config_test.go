@@ -61,8 +61,18 @@ func TestLoadConfigFrom(t *testing.T) {
 
 	writeFile(t, Path, `{
 	  "servers": {
-	    "a": { "command": ["echo"], "timeout": "45s", "spawn": "lazy" },
-	    "b": { "command": ["true"], "enabled": false, "description": "disabled one" }
+	    "a": {
+	      "description": "local one", "timeout": "45s", "spawn": "lazy",
+	      "server": { "command": ["echo"] }
+	    },
+	    "b": {
+	      "description": "disabled one", "enabled": false,
+	      "server": { "command": ["true"] }
+	    },
+	    "c": {
+	      "description": "remote one",
+	      "server": { "url": "https://mcp.example.com/mcp", "headers": { "Authorization": "Bearer x" }, "environment": { "REGION": "us-east-1" } }
+	    }
 	  }
 	}`)
 
@@ -81,19 +91,71 @@ func TestLoadConfigFrom(t *testing.T) {
 	if !A.IsEnabled() {
 		t.Error("a should be enabled by default")
 	}
+	if A.Server.IsRemote() {
+		t.Error("a should be local")
+	}
 
 	B := Cfg.Servers["b"]
 	if B.IsEnabled() {
 		t.Error("b should be disabled")
 	}
+
+	C := Cfg.Servers["c"]
+	if !C.Server.IsRemote() {
+		t.Error("c should be remote")
+	}
+	if C.Server.Headers["Authorization"] != "Bearer x" {
+		t.Errorf("c.headers[Authorization] = %q, want Bearer x", C.Server.Headers["Authorization"])
+	}
+	if C.Server.Environment["REGION"] != "us-east-1" {
+		t.Errorf("c.environment[REGION] = %q, want us-east-1 (environment valid on remote)", C.Server.Environment["REGION"])
+	}
 }
 
-func TestLoadConfigMissingCommand(t *testing.T) {
+func TestLoadConfigJSONC(t *testing.T) {
 	Dir := t.TempDir()
-	Path := filepath.Join(Dir, "lazy-mcp.json")
-	writeFile(t, Path, `{ "servers": { "a": { "description": "no command" } } }`)
+	Path := filepath.Join(Dir, "lazy-mcp.jsonc")
 
-	if _, Err := LoadConfigFrom(Path); Err == nil {
-		t.Fatal("expected error for missing command, got nil")
+	writeFile(t, Path, `{
+	  // a leading comment
+	  "servers": {
+	    "a": {
+	      "description": "local one", /* inline */
+	      "server": { "command": ["echo"] }, // trailing comma below
+	    },
+	  }
+	}`)
+
+	Cfg, Err := LoadConfigFrom(Path)
+	if Err != nil {
+		t.Fatalf("LoadConfigFrom jsonc: %v", Err)
+	}
+	if Cfg.Servers["a"].Description != "local one" {
+		t.Errorf("a.description = %q, want %q", Cfg.Servers["a"].Description, "local one")
+	}
+}
+
+func TestLoadConfigValidation(t *testing.T) {
+	Cases := []struct {
+		Name string
+		JSON string
+	}{
+		{"missing description", `{ "servers": { "a": { "server": { "command": ["echo"] } } } }`},
+		{"no transport", `{ "servers": { "a": { "description": "d", "server": {} } } }`},
+		{"both transports", `{ "servers": { "a": { "description": "d", "server": { "command": ["echo"], "url": "https://x" } } } }`},
+		{"local with headers", `{ "servers": { "a": { "description": "d", "server": { "command": ["echo"], "headers": { "K": "V" } } } } }`},
+		{"local with oauth", `{ "servers": { "a": { "description": "d", "server": { "command": ["echo"], "oauth": { "clientId": "x", "clientSecret": "y" } } } } }`},
+		{"oauth missing secret", `{ "servers": { "a": { "description": "d", "server": { "url": "https://x", "oauth": { "clientId": "x" } } } } }`},
+	}
+
+	for _, C := range Cases {
+		t.Run(C.Name, func(t *testing.T) {
+			Dir := t.TempDir()
+			Path := filepath.Join(Dir, "lazy-mcp.json")
+			writeFile(t, Path, C.JSON)
+			if _, Err := LoadConfigFrom(Path); Err == nil {
+				t.Fatalf("expected error for %q, got nil", C.Name)
+			}
+		})
 	}
 }

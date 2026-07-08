@@ -49,29 +49,97 @@ Lives next to `opencode.json` in the opencode config dir
 {
   "servers": {
     "issues-mcp": {
-      "command": ["sh", "-c", "API_TOKEN=\"$(get-secret issues:token)\" exec issues-mcp-server"],
-      "environment": { "API_URL": "https://issues.example.com/api" },
+      "description": "Issue tracker: issues, comments, labels, milestones",
       "spawn": "eager",
       "timeout": "30s",
       "enabled": true,
-      "description": "Issue tracker: issues, comments, labels, milestones"
+      "server": {
+        "command": ["sh", "-c", "API_TOKEN=\"$(get-secret issues:token)\" exec issues-mcp-server"],
+        "environment": { "API_URL": "https://issues.example.com/api" }
+      }
     },
     "docs-mcp": {
-      "command": ["docs-mcp-server"],
-      "description": "Docs and knowledge base: search, read pages"
+      "description": "Docs and knowledge base: search, read pages",
+      "server": { "command": ["docs-mcp-server"] }
+    },
+    "sentry": {
+      "description": "Sentry: issues, projects, error events",
+      "server": {
+        "url": "https://mcp.sentry.dev/mcp",
+        "headers": { "Authorization": "Bearer {{token}}" }
+      }
     }
   }
 }
 ```
 
+Each server has operational **settings** at the top level and a nested
+**`server`** transport block. The transport kind is inferred from the block:
+`command` ⇒ local (stdio subprocess), `url` ⇒ remote (streamable HTTP). Exactly
+one of the two must be set.
+
+### Settings
+
+| Field | Required | Default | Meaning |
+|-------|----------|---------|---------|
+| `description` | yes | — | shown in `servers list`, plugin injection, and search |
+| `spawn` | no | `eager` | `eager` (connect at startup) or `lazy` (connect on first use) |
+| `timeout` | no | `30s` | connect timeout: Go duration (`1h30m12s`) or a bare number of seconds |
+| `enabled` | no | `true` | `false` skips the server entirely |
+| `server` | yes | — | the transport (see below) |
+
+### Transport (`server`) — local
+
 | Field | Required | Default | Meaning |
 |-------|----------|---------|---------|
 | `command` | yes | — | argv to spawn the server (local stdio) |
 | `environment` | no | — | env vars added on top of the inherited environment |
-| `spawn` | no | `eager` | `eager` (connect at startup) or `lazy` (connect on first use) |
-| `timeout` | no | `30s` | connect timeout: Go duration (`1h30m12s`) or a bare number of seconds |
-| `enabled` | no | `true` | `false` skips the server entirely |
-| `description` | no | — | shown in `servers list`, plugin injection, and search |
+
+### Transport (`server`) — remote
+
+| Field | Required | Default | Meaning |
+|-------|----------|---------|---------|
+| `url` | yes | — | streamable-HTTP endpoint of the remote server |
+| `headers` | no | — | headers sent on every request (e.g. a bearer token) |
+| `oauth` | no | — | pre-registered OAuth client credentials: `{ "clientId": ..., "clientSecret": ... }` |
+| `environment` | no | — | env vars used to resolve `{env:...}` and run `{cmd:...}` (see below) |
+
+OAuth uses the client-credentials grant (service-to-service, no user
+interaction); the token endpoint and scopes are discovered from server metadata.
+For API-key servers, prefer `headers`. The interactive (browser)
+authorization-code flow is not implemented yet — see future work.
+
+### Secret interpolation
+
+Rather than hard-coding secrets, any author-supplied string — `command` args,
+`environment` values, `headers`, and `oauth` credentials — may contain
+directives resolved **at connect time**:
+
+- `{env:NAME}` — replaced with `NAME` from the resolution environment. An unset
+  `NAME` is an error.
+- `{cmd:...}` — the body is run via `sh -c` and replaced with its trimmed
+  stdout. A non-zero exit is an error.
+
+The resolution environment is the process environment with the server's
+`environment` map layered on top (**the map wins** on conflict), so `{env:X}`
+resolves from the map even when `X` is not in the ambient process env. Resolution
+is two-phase: `environment` values are resolved first (against the process env),
+then the resolved map feeds everything else — so a header can reference an
+`environment` value that is itself computed by a `{cmd:...}`.
+
+lazy-mcp never learns about any specific secret store: the author supplies the
+command. For example, pulling a GitHub PAT from a `kv` CLI for the hosted GitHub
+MCP server:
+
+```jsonc
+"github": {
+  "description": "GitHub: repos, issues, pull requests, actions",
+  "server": {
+    "url": "https://api.githubcopilot.com/mcp/",
+    "headers": { "Authorization": "Bearer {cmd:kv get github:pat}" }
+  }
+}
+```
 
 ## CLI
 
@@ -103,6 +171,12 @@ Then `lazy-mcp agent setup opencode` to install the injection plugin.
   semantics, e.g. `{ "*": "deny", "get_*": "allow", "delete_item": "allow" }`.
   A blocked tool would be both invisible to `mcp_search` and rejected by
   `mcp_call`. Deferred: not a priority and non-trivial to implement/test.
-- **Remote (URL) servers.** Only local stdio servers are supported today.
+- **Remote (URL) servers.** Supported via a `server.url` transport block
+  (streamable HTTP), with static `headers` and pre-registered client-credentials
+  `oauth`. Still deferred: the **interactive OAuth flow** (browser
+  authorization-code grant with dynamic client registration and on-disk token
+  storage, as opencode does with `opencode mcp auth`). lazy-mcp runs headless as
+  a stdio subprocess, so this needs its own `lazy-mcp mcp auth <server>` command
+  and token store.
 - **Stage 2: plugin-registered proxy.** Experiment with the plugin adding the
   proxy via `client.mcp.add()` so it need not live in `opencode.json`.
