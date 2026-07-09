@@ -25,13 +25,13 @@ func callTool() *mcp.Tool {
 	}
 }
 
-func callHandler(Manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, CallArgs) (*mcp.CallToolResult, any, error) {
-	return func(Ctx context.Context, _ *mcp.CallToolRequest, Args CallArgs) (*mcp.CallToolResult, any, error) {
-		Result, Err := Manager.Call(Ctx, Args.Server, Args.Tool, Args.Args)
-		if Err != nil {
-			return nil, nil, fmt.Errorf("calling tool: %w", Err)
+func callHandler(manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, CallArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, args CallArgs) (*mcp.CallToolResult, any, error) {
+		result, err := manager.Call(ctx, args.Server, args.Tool, args.Args)
+		if err != nil {
+			return nil, nil, fmt.Errorf("calling tool: %w", err)
 		}
 
-		return Result, nil, nil
+		return result, nil, nil
 	}
 }

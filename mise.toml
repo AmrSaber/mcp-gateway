@@ -4,7 +4,8 @@ golangci-lint = "latest"
 
 [tasks.build]
 description = "Build the project into ~/.local/bin/lazy-mcp"
-run = ["mise run test", "go build -o ~/.local/bin/lazy-mcp ."]
+depends = ["test"]
+run = "go build -o ~/.local/bin/lazy-mcp ."
 
 [tasks.test]
 description = "Run vet, lint, and unit tests"

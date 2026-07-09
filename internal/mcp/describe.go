@@ -25,20 +25,20 @@ func describeTool() *mcp.Tool {
 	}
 }
 
-func describeHandler(Manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, DescribeArgs) (*mcp.CallToolResult, any, error) {
-	return func(Ctx context.Context, _ *mcp.CallToolRequest, Args DescribeArgs) (*mcp.CallToolResult, any, error) {
-		Schema, Err := Manager.Describe(Ctx, Args.Server, Args.Tool)
-		if Err != nil {
-			return nil, nil, fmt.Errorf("describing tool: %w", Err)
+func describeHandler(manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, DescribeArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, args DescribeArgs) (*mcp.CallToolResult, any, error) {
+		schema, err := manager.Describe(ctx, args.Server, args.Tool)
+		if err != nil {
+			return nil, nil, fmt.Errorf("describing tool: %w", err)
 		}
 
-		Out, Err := json.Marshal(Schema)
-		if Err != nil {
-			return nil, nil, fmt.Errorf("marshalling schema: %w", Err)
+		out, err := json.Marshal(schema)
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshalling schema: %w", err)
 		}
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: string(Out)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: string(out)}},
 		}, nil, nil
 	}
 }

@@ -3,14 +3,14 @@ package cmd
 import "github.com/spf13/cobra"
 
 func newAgentCmd() *cobra.Command {
-	Cmd := &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Commands for agent integration",
 	}
 
-	Cmd.AddCommand(newAgentMCPCmd())
-	Cmd.AddCommand(newAgentPluginCmd())
-	Cmd.AddCommand(newAgentSetupCmd())
+	cmd.AddCommand(newAgentMCPCmd())
+	cmd.AddCommand(newAgentPluginCmd())
+	cmd.AddCommand(newAgentSetupCmd())
 
-	return Cmd
+	return cmd
 }

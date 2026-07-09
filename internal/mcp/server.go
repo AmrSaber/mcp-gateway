@@ -10,8 +10,8 @@ import (
 )
 
 // Register wires the three meta-tools onto Server, backed by Manager.
-func Register(Server *mcp.Server, Manager *proxy.Manager) {
-	mcp.AddTool(Server, searchTool(), searchHandler(Manager))
-	mcp.AddTool(Server, describeTool(), describeHandler(Manager))
-	mcp.AddTool(Server, callTool(), callHandler(Manager))
+func Register(server *mcp.Server, manager *proxy.Manager) {
+	mcp.AddTool(server, searchTool(), searchHandler(manager))
+	mcp.AddTool(server, describeTool(), describeHandler(manager))
+	mcp.AddTool(server, callTool(), callHandler(manager))
 }

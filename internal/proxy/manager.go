@@ -57,54 +57,54 @@ type ServerInfo struct {
 
 // NewManager builds a manager from config. It does not spawn anything yet —
 // call Start to connect eager servers.
-func NewManager(Config *Config) *Manager {
+func NewManager(config *Config) *Manager {
 	return &Manager{
-		Config:   Config,
+		Config:   config,
 		Sessions: make(map[string]*Downstream),
 	}
 }
 
 // Start connects all enabled servers whose spawn mode is eager. Lazy servers
 // are connected on first use (see ensure).
-func (Mgr *Manager) Start(Ctx context.Context) error {
-	for Name, Srv := range Mgr.Config.Servers {
-		if !Srv.IsEnabled() {
+func (mgr *Manager) Start(ctx context.Context) error {
+	for name, srv := range mgr.Config.Servers {
+		if !srv.IsEnabled() {
 			continue
 		}
-		if Srv.Spawn == SpawnLazy {
+		if srv.Spawn == SpawnLazy {
 			continue
 		}
-		if _, Err := Mgr.ensure(Ctx, Name); Err != nil {
-			return fmt.Errorf("connecting %q: %w", Name, Err)
+		if _, err := mgr.ensure(ctx, name); err != nil {
+			return fmt.Errorf("connecting %q: %w", name, err)
 		}
 	}
 	return nil
 }
 
 // Close shuts down every connected downstream, killing subprocesses.
-func (Mgr *Manager) Close() {
-	Mgr.Mu.Lock()
-	defer Mgr.Mu.Unlock()
+func (mgr *Manager) Close() {
+	mgr.Mu.Lock()
+	defer mgr.Mu.Unlock()
 
-	for _, Down := range Mgr.Sessions {
-		if Down.Session != nil {
-			_ = Down.Session.Close()
+	for _, down := range mgr.Sessions {
+		if down.Session != nil {
+			_ = down.Session.Close()
 		}
 	}
-	Mgr.Sessions = make(map[string]*Downstream)
+	mgr.Sessions = make(map[string]*Downstream)
 }
 
 // Servers returns the enabled servers' name + description, for `servers list`
 // and plugin injection. Independent of connection state.
-func (Mgr *Manager) Servers() []ServerInfo {
-	var Out []ServerInfo
-	for Name, Srv := range Mgr.Config.Servers {
-		if !Srv.IsEnabled() {
+func (mgr *Manager) Servers() []ServerInfo {
+	var out []ServerInfo
+	for name, srv := range mgr.Config.Servers {
+		if !srv.IsEnabled() {
 			continue
 		}
-		Out = append(Out, ServerInfo{Name: Name, Description: Srv.Description})
+		out = append(out, ServerInfo{Name: name, Description: srv.Description})
 	}
-	return Out
+	return out
 }
 
 // Search limits: results default to DefaultSearchLimit and the caller may raise
@@ -145,201 +145,201 @@ type toolScore struct {
 // stability. Matching considers name + description + serialized input schema so
 // capabilities buried in parameter schemas are still found; the schema itself is
 // not returned (see ToolRef).
-func (Mgr *Manager) Search(Ctx context.Context, Queries []string, ServerFilter string, Limit int) ([]ToolRef, error) {
-	Terms := normalizeTerms(Queries)
-	if len(Terms) == 0 {
+func (mgr *Manager) Search(ctx context.Context, queries []string, serverFilter string, limit int) ([]ToolRef, error) {
+	terms := normalizeTerms(queries)
+	if len(terms) == 0 {
 		return nil, fmt.Errorf("search requires at least one non-blank query term")
 	}
 
-	if Limit <= 0 {
-		Limit = DefaultSearchLimit
+	if limit <= 0 {
+		limit = DefaultSearchLimit
 	}
-	if Limit > MaxSearchLimit {
-		return nil, fmt.Errorf("limit %d exceeds the maximum of %d", Limit, MaxSearchLimit)
-	}
-
-	if Err := Mgr.ensureAll(Ctx); Err != nil {
-		return nil, Err
+	if limit > MaxSearchLimit {
+		return nil, fmt.Errorf("limit %d exceeds the maximum of %d", limit, MaxSearchLimit)
 	}
 
-	Mgr.Mu.Lock()
-	defer Mgr.Mu.Unlock()
+	if err := mgr.ensureAll(ctx); err != nil {
+		return nil, err
+	}
 
-	var Scored []toolScore
-	for Name, Down := range Mgr.Sessions {
-		if ServerFilter != "" && Name != ServerFilter {
+	mgr.Mu.Lock()
+	defer mgr.Mu.Unlock()
+
+	var scored []toolScore
+	for name, down := range mgr.Sessions {
+		if serverFilter != "" && name != serverFilter {
 			continue
 		}
-		Scored = append(Scored, scoreTools(Name, Down.Tools, Terms)...)
+		scored = append(scored, scoreTools(name, down.Tools, terms)...)
 	}
 
-	sortByRelevance(Scored)
+	sortByRelevance(scored)
 
-	if len(Scored) > Limit {
-		Scored = Scored[:Limit]
+	if len(scored) > limit {
+		scored = scored[:limit]
 	}
 
-	Out := make([]ToolRef, len(Scored))
-	for I, S := range Scored {
-		Out[I] = S.Ref
+	out := make([]ToolRef, len(scored))
+	for i, s := range scored {
+		out[i] = s.Ref
 	}
-	return Out, nil
+	return out, nil
 }
 
 // normalizeTerms lowercases, trims, and drops blank query terms.
-func normalizeTerms(Queries []string) []string {
-	Terms := make([]string, 0, len(Queries))
-	for _, Q := range Queries {
-		if Trimmed := strings.TrimSpace(strings.ToLower(Q)); Trimmed != "" {
-			Terms = append(Terms, Trimmed)
+func normalizeTerms(queries []string) []string {
+	terms := make([]string, 0, len(queries))
+	for _, q := range queries {
+		if trimmed := strings.TrimSpace(strings.ToLower(q)); trimmed != "" {
+			terms = append(terms, trimmed)
 		}
 	}
-	return Terms
+	return terms
 }
 
 // scoreTools scores every tool of one server against the (already normalized)
 // terms and returns only those matching at least one term.
-func scoreTools(Server string, Tools []*mcp.Tool, Terms []string) []toolScore {
-	var Out []toolScore
-	for _, Tool := range Tools {
-		if S, Ok := scoreTool(Server, Tool, Terms); Ok {
-			Out = append(Out, S)
+func scoreTools(server string, tools []*mcp.Tool, terms []string) []toolScore {
+	var out []toolScore
+	for _, tool := range tools {
+		if s, ok := scoreTool(server, tool, terms); ok {
+			out = append(out, s)
 		}
 	}
-	return Out
+	return out
 }
 
 // scoreTool computes the relevance of one tool against the terms. It matches
 // each term independently against three fields — name, description, and the
 // serialized input schema — and awards field weights (binary per field). It
 // returns the ToolRef plus the ranking keys, and Ok=false if nothing matched.
-func scoreTool(Server string, Tool *mcp.Tool, Terms []string) (toolScore, bool) {
-	Name := strings.ToLower(Tool.Name)
-	Desc := strings.ToLower(Tool.Description)
-	Schema := strings.ToLower(serializeSchema(Tool))
+func scoreTool(server string, tool *mcp.Tool, terms []string) (toolScore, bool) {
+	name := strings.ToLower(tool.Name)
+	desc := strings.ToLower(tool.Description)
+	schema := strings.ToLower(serializeSchema(tool))
 
-	var Matched []string
-	Score := 0
-	HitName, HitDesc, HitSchema := false, false, false
+	var matched []string
+	score := 0
+	hitName, hitDesc, hitSchema := false, false, false
 
-	for _, Term := range Terms {
-		InName := strings.Contains(Name, Term)
-		InDesc := strings.Contains(Desc, Term)
-		InSchema := strings.Contains(Schema, Term)
+	for _, term := range terms {
+		inName := strings.Contains(name, term)
+		inDesc := strings.Contains(desc, term)
+		inSchema := strings.Contains(schema, term)
 
-		if !InName && !InDesc && !InSchema {
+		if !inName && !inDesc && !inSchema {
 			continue
 		}
 
-		Matched = append(Matched, Term)
-		if InName {
-			Score += scoreName
-			HitName = true
+		matched = append(matched, term)
+		if inName {
+			score += scoreName
+			hitName = true
 		}
-		if InDesc {
-			Score += scoreDescription
-			HitDesc = true
+		if inDesc {
+			score += scoreDescription
+			hitDesc = true
 		}
-		if InSchema {
-			Score += scoreSchema
-			HitSchema = true
+		if inSchema {
+			score += scoreSchema
+			hitSchema = true
 		}
 	}
 
-	if len(Matched) == 0 {
+	if len(matched) == 0 {
 		return toolScore{}, false
 	}
 
 	// Field labels in fixed name→description→schema order.
-	var Fields []string
-	if HitName {
-		Fields = append(Fields, "name")
+	var fields []string
+	if hitName {
+		fields = append(fields, "name")
 	}
-	if HitDesc {
-		Fields = append(Fields, "description")
+	if hitDesc {
+		fields = append(fields, "description")
 	}
-	if HitSchema {
-		Fields = append(Fields, "input schema")
+	if hitSchema {
+		fields = append(fields, "input schema")
 	}
 
 	return toolScore{
 		Ref: ToolRef{
-			Server:        Server,
-			Name:          Tool.Name,
-			Description:   Tool.Description,
-			Matched:       Matched,
-			MatchedFields: Fields,
+			Server:        server,
+			Name:          tool.Name,
+			Description:   tool.Description,
+			Matched:       matched,
+			MatchedFields: fields,
 		},
-		TermsMatched: len(Matched),
-		Score:        Score,
+		TermsMatched: len(matched),
+		Score:        score,
 	}, true
 }
 
 // serializeSchema renders a tool's input schema to a string for matching, so
 // capabilities documented in parameter descriptions are searchable.
-func serializeSchema(Tool *mcp.Tool) string {
-	if Tool.InputSchema == nil {
+func serializeSchema(tool *mcp.Tool) string {
+	if tool.InputSchema == nil {
 		return ""
 	}
-	if Raw, Err := json.Marshal(Tool.InputSchema); Err == nil {
-		return string(Raw)
+	if raw, err := json.Marshal(tool.InputSchema); err == nil {
+		return string(raw)
 	}
 	return ""
 }
 
 // sortByRelevance orders results breadth-first: more distinct terms matched
 // first, then higher field-weighted score, then name for a stable order.
-func sortByRelevance(Scored []toolScore) {
-	sort.SliceStable(Scored, func(I, J int) bool {
-		A, B := Scored[I], Scored[J]
-		if A.TermsMatched != B.TermsMatched {
-			return A.TermsMatched > B.TermsMatched
+func sortByRelevance(scored []toolScore) {
+	sort.SliceStable(scored, func(i, j int) bool {
+		a, b := scored[i], scored[j]
+		if a.TermsMatched != b.TermsMatched {
+			return a.TermsMatched > b.TermsMatched
 		}
-		if A.Score != B.Score {
-			return A.Score > B.Score
+		if a.Score != b.Score {
+			return a.Score > b.Score
 		}
-		return A.Ref.Name < B.Ref.Name
+		return a.Ref.Name < b.Ref.Name
 	})
 }
 
 // Describe returns the full input schema of one tool on one server.
-func (Mgr *Manager) Describe(Ctx context.Context, Server, Tool string) (any, error) {
-	Down, Err := Mgr.ensure(Ctx, Server)
-	if Err != nil {
-		return nil, Err
+func (mgr *Manager) Describe(ctx context.Context, server, tool string) (any, error) {
+	down, err := mgr.ensure(ctx, server)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, T := range Down.Tools {
-		if T.Name == Tool {
-			return T.InputSchema, nil
+	for _, t := range down.Tools {
+		if t.Name == tool {
+			return t.InputSchema, nil
 		}
 	}
 
-	return nil, fmt.Errorf("tool %q not found on server %q", Tool, Server)
+	return nil, fmt.Errorf("tool %q not found on server %q", tool, server)
 }
 
 // Call invokes a downstream tool and returns its raw result.
-func (Mgr *Manager) Call(Ctx context.Context, Server, Tool string, Args any) (*mcp.CallToolResult, error) {
-	Down, Err := Mgr.ensure(Ctx, Server)
-	if Err != nil {
-		return nil, Err
+func (mgr *Manager) Call(ctx context.Context, server, tool string, args any) (*mcp.CallToolResult, error) {
+	down, err := mgr.ensure(ctx, server)
+	if err != nil {
+		return nil, err
 	}
 
-	return Down.Session.CallTool(Ctx, &mcp.CallToolParams{
-		Name:      Tool,
-		Arguments: Args,
+	return down.Session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      tool,
+		Arguments: args,
 	})
 }
 
 // ensureAll connects every enabled server not yet connected. Used by Search so
 // a broad query sees the full catalog even for lazy servers.
-func (Mgr *Manager) ensureAll(Ctx context.Context) error {
-	for Name, Srv := range Mgr.Config.Servers {
-		if !Srv.IsEnabled() {
+func (mgr *Manager) ensureAll(ctx context.Context) error {
+	for name, srv := range mgr.Config.Servers {
+		if !srv.IsEnabled() {
 			continue
 		}
-		if _, Err := Mgr.ensure(Ctx, Name); Err != nil {
-			return fmt.Errorf("connecting %q: %w", Name, Err)
+		if _, err := mgr.ensure(ctx, name); err != nil {
+			return fmt.Errorf("connecting %q: %w", name, err)
 		}
 	}
 	return nil
@@ -347,61 +347,61 @@ func (Mgr *Manager) ensureAll(Ctx context.Context) error {
 
 // ensure returns a connected downstream, connecting it on first use. Safe to
 // call repeatedly; connection is cached.
-func (Mgr *Manager) ensure(Ctx context.Context, Name string) (*Downstream, error) {
-	Mgr.Mu.Lock()
-	defer Mgr.Mu.Unlock()
+func (mgr *Manager) ensure(ctx context.Context, name string) (*Downstream, error) {
+	mgr.Mu.Lock()
+	defer mgr.Mu.Unlock()
 
-	if Down, Ok := Mgr.Sessions[Name]; Ok {
-		return Down, nil
+	if down, ok := mgr.Sessions[name]; ok {
+		return down, nil
 	}
 
-	Srv, Ok := Mgr.Config.Servers[Name]
-	if !Ok {
-		return nil, fmt.Errorf("unknown server %q", Name)
+	srv, ok := mgr.Config.Servers[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown server %q", name)
 	}
-	if !Srv.IsEnabled() {
-		return nil, fmt.Errorf("server %q is disabled", Name)
-	}
-
-	Down, Err := connect(Ctx, Name, Srv)
-	if Err != nil {
-		return nil, Err
+	if !srv.IsEnabled() {
+		return nil, fmt.Errorf("server %q is disabled", name)
 	}
 
-	Mgr.Sessions[Name] = Down
-	return Down, nil
+	down, err := connect(ctx, name, srv)
+	if err != nil {
+		return nil, err
+	}
+
+	mgr.Sessions[name] = down
+	return down, nil
 }
 
 // connect performs the MCP handshake and lists tools over the server's
 // transport: a spawned stdio subprocess for local servers, or streamable HTTP
 // for remote (URL) servers.
-func connect(Ctx context.Context, Name string, Srv ServerConfig) (*Downstream, error) {
-	ConnectCtx, Cancel := context.WithTimeout(Ctx, Srv.Timeout.OrDefault())
-	defer Cancel()
+func connect(ctx context.Context, name string, srv ServerConfig) (*Downstream, error) {
+	connectCtx, cancel := context.WithTimeout(ctx, srv.Timeout.OrDefault())
+	defer cancel()
 
-	Transport, Err := transportFor(Ctx, Srv.Server)
-	if Err != nil {
-		return nil, fmt.Errorf("configuring transport for %q: %w", Name, Err)
+	transport, err := transportFor(ctx, srv.Server)
+	if err != nil {
+		return nil, fmt.Errorf("configuring transport for %q: %w", name, err)
 	}
 
-	Client := mcp.NewClient(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
 
-	Session, Err := Client.Connect(ConnectCtx, Transport, nil)
-	if Err != nil {
-		return nil, fmt.Errorf("connecting to %q: %w", Name, Err)
+	session, err := client.Connect(connectCtx, transport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("connecting to %q: %w", name, err)
 	}
 
-	Listed, Err := Session.ListTools(ConnectCtx, nil)
-	if Err != nil {
-		_ = Session.Close()
-		return nil, fmt.Errorf("listing tools for %q: %w", Name, Err)
+	listed, err := session.ListTools(connectCtx, nil)
+	if err != nil {
+		_ = session.Close()
+		return nil, fmt.Errorf("listing tools for %q: %w", name, err)
 	}
 
 	return &Downstream{
-		Name:    Name,
-		Config:  Srv,
-		Session: Session,
-		Tools:   Listed.Tools,
+		Name:    name,
+		Config:  srv,
+		Session: session,
+		Tools:   listed.Tools,
 	}, nil
 }
 
@@ -415,23 +415,23 @@ func connect(Ctx context.Context, Name string, Srv ServerConfig) (*Downstream, e
 // the subprocess environment and as the resolution source for the remaining
 // values (command args, headers, oauth). This lets a header reference an
 // environment value that is itself computed by a {cmd:...}.
-func transportFor(Ctx context.Context, Spec ServerSpec) (mcp.Transport, error) {
-	ResolvedEnv, Err := interpolateMap(Ctx, Spec.Environment, os.Environ())
-	if Err != nil {
-		return nil, fmt.Errorf("resolving environment: %w", Err)
+func transportFor(ctx context.Context, spec ServerSpec) (mcp.Transport, error) {
+	resolvedEnv, err := interpolateMap(ctx, spec.Environment, os.Environ())
+	if err != nil {
+		return nil, fmt.Errorf("resolving environment: %w", err)
 	}
-	Merged := mergeEnv(ResolvedEnv)
+	merged := mergeEnv(resolvedEnv)
 
-	if Spec.IsRemote() {
-		return remoteTransport(Ctx, Spec, Merged)
-	}
-
-	Args, Err := interpolateSlice(Ctx, Spec.Command, Merged)
-	if Err != nil {
-		return nil, fmt.Errorf("resolving command: %w", Err)
+	if spec.IsRemote() {
+		return remoteTransport(ctx, spec, merged)
 	}
 
-	Cmd := exec.CommandContext(Ctx, Args[0], Args[1:]...)
-	Cmd.Env = Merged
-	return &mcp.CommandTransport{Command: Cmd}, nil
+	args, err := interpolateSlice(ctx, spec.Command, merged)
+	if err != nil {
+		return nil, fmt.Errorf("resolving command: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Env = merged
+	return &mcp.CommandTransport{Command: cmd}, nil
 }

@@ -34,20 +34,20 @@ func searchTool() *mcp.Tool {
 	}
 }
 
-func searchHandler(Manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, SearchArgs) (*mcp.CallToolResult, any, error) {
-	return func(Ctx context.Context, _ *mcp.CallToolRequest, Args SearchArgs) (*mcp.CallToolResult, any, error) {
-		Hits, Err := Manager.Search(Ctx, Args.Query, Args.Server, Args.Limit)
-		if Err != nil {
-			return nil, nil, fmt.Errorf("searching tools: %w", Err)
+func searchHandler(manager *proxy.Manager) func(context.Context, *mcp.CallToolRequest, SearchArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, args SearchArgs) (*mcp.CallToolResult, any, error) {
+		hits, err := manager.Search(ctx, args.Query, args.Server, args.Limit)
+		if err != nil {
+			return nil, nil, fmt.Errorf("searching tools: %w", err)
 		}
 
-		Out, Err := json.Marshal(Hits)
-		if Err != nil {
-			return nil, nil, fmt.Errorf("marshalling results: %w", Err)
+		out, err := json.Marshal(hits)
+		if err != nil {
+			return nil, nil, fmt.Errorf("marshalling results: %w", err)
 		}
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: string(Out)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: string(out)}},
 		}, nil, nil
 	}
 }

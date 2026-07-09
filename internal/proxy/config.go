@@ -65,7 +65,7 @@ type ServerSpec struct {
 // IsRemote reports whether this is a remote (URL) server rather than a local
 // stdio one. Only meaningful after validation has confirmed exactly one of
 // Command/URL is set.
-func (Spec ServerSpec) IsRemote() bool { return Spec.URL != "" }
+func (spec ServerSpec) IsRemote() bool { return spec.URL != "" }
 
 // OAuthConfig configures pre-registered OAuth client credentials for a remote
 // server. Both fields are required: lazy-mcp uses the client-credentials grant
@@ -80,138 +80,139 @@ type OAuthConfig struct {
 
 // IsEnabled reports whether the server should be loaded. Enabled defaults to
 // true when omitted; only an explicit false skips the server.
-func (Config ServerConfig) IsEnabled() bool {
-	return Config.Enabled == nil || *Config.Enabled
+func (config ServerConfig) IsEnabled() bool {
+	return config.Enabled == nil || *config.Enabled
+}
+
+// validate enforces the config invariants: a description, and exactly one
+// transport (local Command or remote URL) with only its own fields set.
+// Environment is allowed on both transports (it feeds {env:...} resolution).
+func (config ServerConfig) validate() error {
+	if config.Description == "" {
+		return fmt.Errorf("description is required")
+	}
+
+	spec := config.Server
+	hasCommand := len(spec.Command) > 0
+	hasURL := spec.URL != ""
+
+	switch {
+	case hasCommand && hasURL:
+		return fmt.Errorf("exactly one of server.command or server.url is required, not both")
+	case !hasCommand && !hasURL:
+		return fmt.Errorf("exactly one of server.command or server.url is required")
+	case hasCommand:
+		if len(spec.Headers) > 0 || spec.OAuth != nil {
+			return fmt.Errorf("server.headers and server.oauth are only valid for remote (url) servers")
+		}
+	case hasURL:
+		if spec.OAuth != nil && (spec.OAuth.ClientID == "" || spec.OAuth.ClientSecret == "") {
+			return fmt.Errorf("server.oauth requires both clientId and clientSecret")
+		}
+	}
+
+	return nil
 }
 
 // Duration accepts either a Go duration string ("1h30m12s") or a bare number
 // (interpreted as seconds) from JSON.
 type Duration time.Duration
 
-func (Dur *Duration) UnmarshalJSON(Data []byte) error {
+func (dur *Duration) UnmarshalJSON(data []byte) error {
 	// Bare number → seconds.
-	if Num, Err := strconv.ParseFloat(string(Data), 64); Err == nil {
-		*Dur = Duration(time.Duration(Num * float64(time.Second)))
+	if num, err := strconv.ParseFloat(string(data), 64); err == nil {
+		*dur = Duration(time.Duration(num * float64(time.Second)))
 		return nil
 	}
 
-	var Str string
-	if Err := json.Unmarshal(Data, &Str); Err != nil {
-		return fmt.Errorf("timeout must be a duration string or number of seconds: %w", Err)
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return fmt.Errorf("timeout must be a duration string or number of seconds: %w", err)
 	}
 
-	Parsed, Err := time.ParseDuration(Str)
-	if Err != nil {
-		return fmt.Errorf("invalid timeout %q: %w", Str, Err)
+	parsed, err := time.ParseDuration(str)
+	if err != nil {
+		return fmt.Errorf("invalid timeout %q: %w", str, err)
 	}
 
-	*Dur = Duration(Parsed)
+	*dur = Duration(parsed)
 	return nil
 }
 
 // OrDefault returns the duration, or DefaultTimeout when unset (zero).
-func (Dur Duration) OrDefault() time.Duration {
-	if Dur == 0 {
+func (dur Duration) OrDefault() time.Duration {
+	if dur == 0 {
 		return DefaultTimeout
 	}
-	return time.Duration(Dur)
+	return time.Duration(dur)
 }
 
 // ConfigDir resolves opencode's config directory: OPENCODE_CONFIG_DIR if set,
 // else $XDG_CONFIG_HOME/opencode, else ~/.config/opencode. Mirrors opencode's
 // own resolution for the common case.
 func ConfigDir() (string, error) {
-	if Dir := os.Getenv("OPENCODE_CONFIG_DIR"); Dir != "" {
-		return Dir, nil
+	if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
+		return dir, nil
 	}
 
-	Base := os.Getenv("XDG_CONFIG_HOME")
-	if Base == "" {
-		Home, Err := os.UserHomeDir()
-		if Err != nil {
-			return "", fmt.Errorf("resolving home directory: %w", Err)
+	configDir := os.Getenv("XDG_CONFIG_HOME")
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolving home directory: %w", err)
 		}
-		Base = filepath.Join(Home, ".config")
+
+		configDir = filepath.Join(home, ".config")
 	}
 
-	return filepath.Join(Base, "opencode"), nil
+	return configDir, nil
 }
 
 // ConfigPath resolves the config file in the config dir, preferring
 // lazy-mcp.jsonc over lazy-mcp.json. It returns an error if neither exists.
 func ConfigPath() (string, error) {
-	Dir, Err := ConfigDir()
-	if Err != nil {
-		return "", Err
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
 	}
 
-	Jsonc := filepath.Join(Dir, "lazy-mcp.jsonc")
-	Json := filepath.Join(Dir, "lazy-mcp.json")
-	for _, Path := range []string{Jsonc, Json} {
-		if _, Err := os.Stat(Path); Err == nil {
-			return Path, nil
+	jsonc := filepath.Join(dir, "lazy-mcp.jsonc")
+	json := filepath.Join(dir, "lazy-mcp.json")
+	for _, path := range []string{jsonc, json} {
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
 		}
 	}
 
-	return "", fmt.Errorf("no config found: expected %s or %s", Jsonc, Json)
+	return "", fmt.Errorf("no config found: expected %s or %s", jsonc, json)
 }
 
 // LoadConfig reads and parses the config from the resolved config dir.
 func LoadConfig() (*Config, error) {
-	Path, Err := ConfigPath()
-	if Err != nil {
-		return nil, Err
+	path, err := ConfigPath()
+	if err != nil {
+		return nil, err
 	}
-	return LoadConfigFrom(Path)
+	return LoadConfigFrom(path)
 }
 
 // LoadConfigFrom reads and parses lazy-mcp.json from an explicit path.
-func LoadConfigFrom(Path string) (*Config, error) {
-	Raw, Err := os.ReadFile(Path)
-	if Err != nil {
-		return nil, fmt.Errorf("reading %s: %w", Path, Err)
+func LoadConfigFrom(path string) (*Config, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	var Cfg Config
-	if Err := json.Unmarshal(jsonc.ToJSON(Raw), &Cfg); Err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", Path, Err)
+	var cfg Config
+	if err := json.Unmarshal(jsonc.ToJSON(raw), &cfg); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
-	for Name, Srv := range Cfg.Servers {
-		if Err := Srv.validate(); Err != nil {
-			return nil, fmt.Errorf("server %q: %w", Name, Err)
+	for name, srv := range cfg.Servers {
+		if err := srv.validate(); err != nil {
+			return nil, fmt.Errorf("server %q: %w", name, err)
 		}
 	}
 
-	return &Cfg, nil
-}
-
-// validate enforces the config invariants: a description, and exactly one
-// transport (local Command or remote URL) with only its own fields set.
-// Environment is allowed on both transports (it feeds {env:...} resolution).
-func (Cfg ServerConfig) validate() error {
-	if Cfg.Description == "" {
-		return fmt.Errorf("description is required")
-	}
-
-	Spec := Cfg.Server
-	HasCommand := len(Spec.Command) > 0
-	HasURL := Spec.URL != ""
-
-	switch {
-	case HasCommand && HasURL:
-		return fmt.Errorf("exactly one of server.command or server.url is required, not both")
-	case !HasCommand && !HasURL:
-		return fmt.Errorf("exactly one of server.command or server.url is required")
-	case HasCommand:
-		if len(Spec.Headers) > 0 || Spec.OAuth != nil {
-			return fmt.Errorf("server.headers and server.oauth are only valid for remote (url) servers")
-		}
-	case HasURL:
-		if Spec.OAuth != nil && (Spec.OAuth.ClientID == "" || Spec.OAuth.ClientSecret == "") {
-			return fmt.Errorf("server.oauth requires both clientId and clientSecret")
-		}
-	}
-
-	return nil
+	return &cfg, nil
 }

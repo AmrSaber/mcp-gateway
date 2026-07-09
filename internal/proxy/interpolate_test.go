@@ -6,9 +6,9 @@ import (
 )
 
 func TestInterpolateEnv(t *testing.T) {
-	Env := []string{"TOKEN=abc", "TOKEN=xyz", "EMPTY="}
+	env := []string{"TOKEN=abc", "TOKEN=xyz", "EMPTY="}
 
-	Cases := []struct {
+	cases := []struct {
 		In   string
 		Want string
 	}{
@@ -18,91 +18,91 @@ func TestInterpolateEnv(t *testing.T) {
 		{"{env:TOKEN}-{env:TOKEN}", "xyz-xyz"}, // multiple directives
 		{"{notadirective}", "{notadirective}"}, // unknown → literal
 		{"prefix {env:TOKEN} suffix", "prefix xyz suffix"},
-		{"{env: TOKEN}", "xyz"},   // whitespace around value trimmed
-		{"{env:TOKEN }", "xyz"},   // trailing whitespace trimmed
-		{"{ env:TOKEN }", "xyz"},  // whitespace around directive trimmed
+		{"{env: TOKEN}", "xyz"},  // whitespace around value trimmed
+		{"{env:TOKEN }", "xyz"},  // trailing whitespace trimmed
+		{"{ env:TOKEN }", "xyz"}, // whitespace around directive trimmed
 	}
 
-	for _, C := range Cases {
-		Got, Err := interpolate(context.Background(), C.In, Env)
-		if Err != nil {
-			t.Fatalf("interpolate(%q): %v", C.In, Err)
+	for _, c := range cases {
+		got, err := interpolate(context.Background(), c.In, env)
+		if err != nil {
+			t.Fatalf("interpolate(%q): %v", c.In, err)
 		}
-		if Got != C.Want {
-			t.Errorf("interpolate(%q) = %q, want %q", C.In, Got, C.Want)
+		if got != c.Want {
+			t.Errorf("interpolate(%q) = %q, want %q", c.In, got, c.Want)
 		}
 	}
 }
 
 func TestInterpolateEnvUnset(t *testing.T) {
-	if _, Err := interpolate(context.Background(), "{env:MISSING}", nil); Err == nil {
+	if _, err := interpolate(context.Background(), "{env:MISSING}", nil); err == nil {
 		t.Fatal("expected error for unset env var, got nil")
 	}
 }
 
 func TestInterpolateCmd(t *testing.T) {
-	Got, Err := interpolate(context.Background(), "Bearer {cmd:printf secret}", nil)
-	if Err != nil {
-		t.Fatalf("interpolate cmd: %v", Err)
+	got, err := interpolate(context.Background(), "Bearer {cmd:printf secret}", nil)
+	if err != nil {
+		t.Fatalf("interpolate cmd: %v", err)
 	}
-	if Got != "Bearer secret" {
-		t.Errorf("got %q, want %q", Got, "Bearer secret")
+	if got != "Bearer secret" {
+		t.Errorf("got %q, want %q", got, "Bearer secret")
 	}
 
 	// Trailing whitespace/newline is trimmed.
-	Got, Err = interpolate(context.Background(), "{cmd:echo trimmed}", nil)
-	if Err != nil {
-		t.Fatalf("interpolate cmd trim: %v", Err)
+	got, err = interpolate(context.Background(), "{cmd:echo trimmed}", nil)
+	if err != nil {
+		t.Fatalf("interpolate cmd trim: %v", err)
 	}
-	if Got != "trimmed" {
-		t.Errorf("got %q, want %q", Got, "trimmed")
+	if got != "trimmed" {
+		t.Errorf("got %q, want %q", got, "trimmed")
 	}
 
 	// Whitespace around the command body is trimmed.
-	Got, Err = interpolate(context.Background(), "{cmd: printf spaced }", nil)
-	if Err != nil {
-		t.Fatalf("interpolate cmd spaced: %v", Err)
+	got, err = interpolate(context.Background(), "{cmd: printf spaced }", nil)
+	if err != nil {
+		t.Fatalf("interpolate cmd spaced: %v", err)
 	}
-	if Got != "spaced" {
-		t.Errorf("got %q, want %q", Got, "spaced")
+	if got != "spaced" {
+		t.Errorf("got %q, want %q", got, "spaced")
 	}
 }
 
 func TestInterpolateCmdFailure(t *testing.T) {
-	if _, Err := interpolate(context.Background(), "{cmd:exit 1}", nil); Err == nil {
+	if _, err := interpolate(context.Background(), "{cmd:exit 1}", nil); err == nil {
 		t.Fatal("expected error for failing command, got nil")
 	}
 }
 
 func TestInterpolateCmdSeesEnv(t *testing.T) {
-	Got, Err := interpolate(context.Background(), "{cmd:printf %s \"$SECRET\"}", []string{"SECRET=fromenv"})
-	if Err != nil {
-		t.Fatalf("interpolate cmd env: %v", Err)
+	got, err := interpolate(context.Background(), "{cmd:printf %s \"$SECRET\"}", []string{"SECRET=fromenv"})
+	if err != nil {
+		t.Fatalf("interpolate cmd env: %v", err)
 	}
-	if Got != "fromenv" {
-		t.Errorf("got %q, want %q", Got, "fromenv")
+	if got != "fromenv" {
+		t.Errorf("got %q, want %q", got, "fromenv")
 	}
 }
 
 // TestTwoPhaseResolution mirrors transportFor's ordering: an environment value
 // computed by {cmd:...} is resolved first, then a header {env:...} reads it.
 func TestTwoPhaseResolution(t *testing.T) {
-	Ctx := context.Background()
+	ctx := context.Background()
 
-	ResolvedEnv, Err := interpolateMap(Ctx, map[string]string{"TOKEN": "{cmd:printf computed}"}, nil)
-	if Err != nil {
-		t.Fatalf("phase 1: %v", Err)
+	resolvedEnv, err := interpolateMap(ctx, map[string]string{"TOKEN": "{cmd:printf computed}"}, nil)
+	if err != nil {
+		t.Fatalf("phase 1: %v", err)
 	}
-	if ResolvedEnv["TOKEN"] != "computed" {
-		t.Fatalf("phase 1 TOKEN = %q, want computed", ResolvedEnv["TOKEN"])
+	if resolvedEnv["TOKEN"] != "computed" {
+		t.Fatalf("phase 1 TOKEN = %q, want computed", resolvedEnv["TOKEN"])
 	}
 
-	Merged := mergeEnv(ResolvedEnv)
-	Header, Err := interpolate(Ctx, "Bearer {env:TOKEN}", Merged)
-	if Err != nil {
-		t.Fatalf("phase 2: %v", Err)
+	merged := mergeEnv(resolvedEnv)
+	header, err := interpolate(ctx, "Bearer {env:TOKEN}", merged)
+	if err != nil {
+		t.Fatalf("phase 2: %v", err)
 	}
-	if Header != "Bearer computed" {
-		t.Errorf("header = %q, want %q", Header, "Bearer computed")
+	if header != "Bearer computed" {
+		t.Errorf("header = %q, want %q", header, "Bearer computed")
 	}
 }

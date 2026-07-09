@@ -11,49 +11,49 @@ import (
 )
 
 func newServersListCmd() *cobra.Command {
-	var Output string
+	var output string
 
-	Cmd := &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List the gated servers and their descriptions",
 		Long: "List the gated (lazy-loaded) MCP servers and their descriptions.\n\n" +
 			"Default output is YAML for readability. Use -o json for the machine-readable\n" +
 			"form the opencode plugin parses to inject the server list into the agent.",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if Output != "yaml" && Output != "json" {
-				return fmt.Errorf("invalid output format %q: expected yaml or json", Output)
+			if output != "yaml" && output != "json" {
+				return fmt.Errorf("invalid output format %q: expected yaml or json", output)
 			}
 
-			Config, Err := proxy.LoadConfig()
-			if Err != nil {
-				return fmt.Errorf("loading config: %w", Err)
+			config, err := proxy.LoadConfig()
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
 			}
 
-			Servers := proxy.NewManager(Config).Servers()
+			servers := proxy.NewManager(config).Servers()
 
-			var Rendered []byte
-			if Output == "json" {
+			var rendered []byte
+			if output == "json" {
 				// Stable, non-nil array so the plugin always gets valid JSON.
-				if Servers == nil {
-					Servers = []proxy.ServerInfo{}
+				if servers == nil {
+					servers = []proxy.ServerInfo{}
 				}
-				Rendered, Err = json.Marshal(Servers)
+				rendered, err = json.Marshal(servers)
 			} else {
-				Rendered, Err = yaml.Marshal(Servers)
+				rendered, err = yaml.Marshal(servers)
 			}
-			if Err != nil {
-				return fmt.Errorf("rendering servers: %w", Err)
+			if err != nil {
+				return fmt.Errorf("rendering servers: %w", err)
 			}
 
-			fmt.Print(string(Rendered))
-			if Output == "json" {
+			fmt.Print(string(rendered))
+			if output == "json" {
 				fmt.Println()
 			}
 			return nil
 		},
 	}
 
-	Cmd.Flags().StringVarP(&Output, "output", "o", "yaml", "Output format: yaml or json")
+	cmd.Flags().StringVarP(&output, "output", "o", "yaml", "Output format: yaml or json")
 
-	return Cmd
+	return cmd
 }

@@ -20,30 +20,30 @@ func newAgentSetupCmd() *cobra.Command {
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			return supportedAgents, cobra.ShellCompDirectiveNoFileComp
 		},
-		RunE: func(_ *cobra.Command, Args []string) error {
-			AgentName := Args[0]
+		RunE: func(_ *cobra.Command, args []string) error {
+			agentName := args[0]
 
-			Content, Err := pluginFor(AgentName)
-			if Err != nil {
-				return Err
+			content, err := pluginFor(agentName)
+			if err != nil {
+				return err
 			}
 
-			switch AgentName {
+			switch agentName {
 			case "opencode":
-				ConfigBase, Err := os.UserConfigDir()
-				if Err != nil {
-					return fmt.Errorf("resolving config directory: %w", Err)
+				configBase, err := os.UserConfigDir()
+				if err != nil {
+					return fmt.Errorf("resolving config directory: %w", err)
 				}
 
-				PluginPath := filepath.Join(ConfigBase, "opencode", "plugins", "lazy-mcp-inject.ts")
-				if Err := writeFile(PluginPath, Content); Err != nil {
-					return fmt.Errorf("writing plugin: %w", Err)
+				pluginPath := filepath.Join(configBase, "opencode", "plugins", "lazy-mcp-inject.ts")
+				if err := writeFile(pluginPath, content); err != nil {
+					return fmt.Errorf("writing plugin: %w", err)
 				}
-				fmt.Printf("plugin written to %s\n", PluginPath)
+				fmt.Printf("plugin written to %s\n", pluginPath)
 				return nil
 
 			default:
-				return fmt.Errorf("unsupported agent %q — supported agents: %s", AgentName, strings.Join(supportedAgents, ", "))
+				return fmt.Errorf("unsupported agent %q — supported agents: %s", agentName, strings.Join(supportedAgents, ", "))
 			}
 		},
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 func TestDurationUnmarshal(t *testing.T) {
-	Cases := []struct {
+	cases := []struct {
 		In   string
 		Want time.Duration
 	}{
@@ -17,49 +17,49 @@ func TestDurationUnmarshal(t *testing.T) {
 		{`"250ms"`, 250 * time.Millisecond},
 	}
 
-	for _, C := range Cases {
-		var D Duration
-		if Err := D.UnmarshalJSON([]byte(C.In)); Err != nil {
-			t.Fatalf("UnmarshalJSON(%s): %v", C.In, Err)
+	for _, c := range cases {
+		var d Duration
+		if err := d.UnmarshalJSON([]byte(c.In)); err != nil {
+			t.Fatalf("UnmarshalJSON(%s): %v", c.In, err)
 		}
-		if time.Duration(D) != C.Want {
-			t.Errorf("UnmarshalJSON(%s) = %v, want %v", C.In, time.Duration(D), C.Want)
+		if time.Duration(d) != c.Want {
+			t.Errorf("UnmarshalJSON(%s) = %v, want %v", c.In, time.Duration(d), c.Want)
 		}
 	}
 }
 
 func TestDurationOrDefault(t *testing.T) {
-	var Zero Duration
-	if Zero.OrDefault() != DefaultTimeout {
-		t.Errorf("zero OrDefault = %v, want %v", Zero.OrDefault(), DefaultTimeout)
+	var zero Duration
+	if zero.OrDefault() != DefaultTimeout {
+		t.Errorf("zero OrDefault = %v, want %v", zero.OrDefault(), DefaultTimeout)
 	}
 
-	Set := Duration(5 * time.Second)
-	if Set.OrDefault() != 5*time.Second {
-		t.Errorf("set OrDefault = %v, want 5s", Set.OrDefault())
+	set := Duration(5 * time.Second)
+	if set.OrDefault() != 5*time.Second {
+		t.Errorf("set OrDefault = %v, want 5s", set.OrDefault())
 	}
 }
 
 func TestServerConfigIsEnabled(t *testing.T) {
-	True := true
-	False := false
+	true := true
+	false := false
 
 	if !(ServerConfig{}).IsEnabled() {
 		t.Error("omitted enabled should default to true")
 	}
-	if !(ServerConfig{Enabled: &True}).IsEnabled() {
+	if !(ServerConfig{Enabled: &true}).IsEnabled() {
 		t.Error("explicit true should be enabled")
 	}
-	if (ServerConfig{Enabled: &False}).IsEnabled() {
+	if (ServerConfig{Enabled: &false}).IsEnabled() {
 		t.Error("explicit false should be disabled")
 	}
 }
 
 func TestLoadConfigFrom(t *testing.T) {
-	Dir := t.TempDir()
-	Path := filepath.Join(Dir, "lazy-mcp.json")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lazy-mcp.json")
 
-	writeFile(t, Path, `{
+	writeFile(t, path, `{
 	  "servers": {
 	    "a": {
 	      "description": "local one", "timeout": "45s", "spawn": "lazy",
@@ -76,47 +76,47 @@ func TestLoadConfigFrom(t *testing.T) {
 	  }
 	}`)
 
-	Cfg, Err := LoadConfigFrom(Path)
-	if Err != nil {
-		t.Fatalf("LoadConfigFrom: %v", Err)
+	cfg, err := LoadConfigFrom(path)
+	if err != nil {
+		t.Fatalf("LoadConfigFrom: %v", err)
 	}
 
-	A := Cfg.Servers["a"]
-	if time.Duration(A.Timeout) != 45*time.Second {
-		t.Errorf("a.timeout = %v, want 45s", time.Duration(A.Timeout))
+	a := cfg.Servers["a"]
+	if time.Duration(a.Timeout) != 45*time.Second {
+		t.Errorf("a.timeout = %v, want 45s", time.Duration(a.Timeout))
 	}
-	if A.Spawn != SpawnLazy {
-		t.Errorf("a.spawn = %q, want lazy", A.Spawn)
+	if a.Spawn != SpawnLazy {
+		t.Errorf("a.spawn = %q, want lazy", a.Spawn)
 	}
-	if !A.IsEnabled() {
+	if !a.IsEnabled() {
 		t.Error("a should be enabled by default")
 	}
-	if A.Server.IsRemote() {
+	if a.Server.IsRemote() {
 		t.Error("a should be local")
 	}
 
-	B := Cfg.Servers["b"]
-	if B.IsEnabled() {
+	b := cfg.Servers["b"]
+	if b.IsEnabled() {
 		t.Error("b should be disabled")
 	}
 
-	C := Cfg.Servers["c"]
-	if !C.Server.IsRemote() {
+	c := cfg.Servers["c"]
+	if !c.Server.IsRemote() {
 		t.Error("c should be remote")
 	}
-	if C.Server.Headers["Authorization"] != "Bearer x" {
-		t.Errorf("c.headers[Authorization] = %q, want Bearer x", C.Server.Headers["Authorization"])
+	if c.Server.Headers["Authorization"] != "Bearer x" {
+		t.Errorf("c.headers[Authorization] = %q, want Bearer x", c.Server.Headers["Authorization"])
 	}
-	if C.Server.Environment["REGION"] != "us-east-1" {
-		t.Errorf("c.environment[REGION] = %q, want us-east-1 (environment valid on remote)", C.Server.Environment["REGION"])
+	if c.Server.Environment["REGION"] != "us-east-1" {
+		t.Errorf("c.environment[REGION] = %q, want us-east-1 (environment valid on remote)", c.Server.Environment["REGION"])
 	}
 }
 
 func TestLoadConfigJSONC(t *testing.T) {
-	Dir := t.TempDir()
-	Path := filepath.Join(Dir, "lazy-mcp.jsonc")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lazy-mcp.jsonc")
 
-	writeFile(t, Path, `{
+	writeFile(t, path, `{
 	  // a leading comment
 	  "servers": {
 	    "a": {
@@ -126,17 +126,17 @@ func TestLoadConfigJSONC(t *testing.T) {
 	  }
 	}`)
 
-	Cfg, Err := LoadConfigFrom(Path)
-	if Err != nil {
-		t.Fatalf("LoadConfigFrom jsonc: %v", Err)
+	cfg, err := LoadConfigFrom(path)
+	if err != nil {
+		t.Fatalf("LoadConfigFrom jsonc: %v", err)
 	}
-	if Cfg.Servers["a"].Description != "local one" {
-		t.Errorf("a.description = %q, want %q", Cfg.Servers["a"].Description, "local one")
+	if cfg.Servers["a"].Description != "local one" {
+		t.Errorf("a.description = %q, want %q", cfg.Servers["a"].Description, "local one")
 	}
 }
 
 func TestLoadConfigValidation(t *testing.T) {
-	Cases := []struct {
+	cases := []struct {
 		Name string
 		JSON string
 	}{
@@ -148,13 +148,13 @@ func TestLoadConfigValidation(t *testing.T) {
 		{"oauth missing secret", `{ "servers": { "a": { "description": "d", "server": { "url": "https://x", "oauth": { "clientId": "x" } } } } }`},
 	}
 
-	for _, C := range Cases {
-		t.Run(C.Name, func(t *testing.T) {
-			Dir := t.TempDir()
-			Path := filepath.Join(Dir, "lazy-mcp.json")
-			writeFile(t, Path, C.JSON)
-			if _, Err := LoadConfigFrom(Path); Err == nil {
-				t.Fatalf("expected error for %q, got nil", C.Name)
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "lazy-mcp.json")
+			writeFile(t, path, c.JSON)
+			if _, err := LoadConfigFrom(path); err == nil {
+				t.Fatalf("expected error for %q, got nil", c.Name)
 			}
 		})
 	}

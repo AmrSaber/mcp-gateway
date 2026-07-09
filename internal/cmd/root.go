@@ -11,41 +11,41 @@ import (
 )
 
 // NewRootCmd builds the root cobra command.
-func NewRootCmd(Version string) *cobra.Command {
-	Root := &cobra.Command{
+func NewRootCmd(version string) *cobra.Command {
+	root := &cobra.Command{
 		Use:     "lazy-mcp",
 		Short:   "Lazy-loading MCP proxy — gate heavy MCP servers behind a small meta-tool surface",
-		Version: resolveVersion(Version),
+		Version: resolveVersion(version),
 	}
 
-	Root.AddCommand(newAgentCmd())
-	Root.AddCommand(newServersCmd())
+	root.AddCommand(newAgentCmd())
+	root.AddCommand(newServersCmd())
 
-	return Root
+	return root
 }
 
 // resolveVersion returns the injected build version, falls back to git
 // describe, and appends '+' if the working tree is dirty.
-func resolveVersion(Injected string) string {
-	if Injected != "" {
-		return Injected
+func resolveVersion(injected string) string {
+	if injected != "" {
+		return injected
 	}
 
-	if _, Err := os.Stat(".git"); Err != nil {
+	if _, err := os.Stat(".git"); err != nil {
 		return "unknown"
 	}
 
-	Tag, Err := exec.Command("git", "describe", "--tags").Output()
-	if Err != nil {
+	tag, err := exec.Command("git", "describe", "--tags").Output()
+	if err != nil {
 		return "unknown"
 	}
 
-	Tag = bytes.TrimSpace(Tag)
+	tag = bytes.TrimSpace(tag)
 
-	Status, _ := exec.Command("git", "status", "--porcelain").Output()
-	if len(bytes.TrimSpace(Status)) > 0 {
-		Tag = append(Tag, '+')
+	status, _ := exec.Command("git", "status", "--porcelain").Output()
+	if len(bytes.TrimSpace(status)) > 0 {
+		tag = append(tag, '+')
 	}
 
-	return string(Tag)
+	return string(tag)
 }

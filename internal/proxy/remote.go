@@ -19,46 +19,46 @@ import (
 // token endpoint from server metadata and refreshes tokens automatically. Only
 // pre-registered client-credentials OAuth is supported — the interactive
 // authorization-code flow is future work.
-func remoteTransport(Ctx context.Context, Spec ServerSpec, Env []string) (mcp.Transport, error) {
-	Headers, Err := interpolateMap(Ctx, Spec.Headers, Env)
-	if Err != nil {
-		return nil, fmt.Errorf("resolving headers: %w", Err)
+func remoteTransport(ctx context.Context, spec ServerSpec, env []string) (mcp.Transport, error) {
+	headers, err := interpolateMap(ctx, spec.Headers, env)
+	if err != nil {
+		return nil, fmt.Errorf("resolving headers: %w", err)
 	}
 
-	HTTPClient := &http.Client{}
-	if len(Headers) > 0 {
-		HTTPClient.Transport = &headerRoundTripper{Headers: Headers, Base: http.DefaultTransport}
+	hTTPClient := &http.Client{}
+	if len(headers) > 0 {
+		hTTPClient.Transport = &headerRoundTripper{Headers: headers, Base: http.DefaultTransport}
 	}
 
-	Transport := &mcp.StreamableClientTransport{
-		Endpoint:   Spec.URL,
-		HTTPClient: HTTPClient,
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:   spec.URL,
+		HTTPClient: hTTPClient,
 	}
 
-	if Spec.OAuth != nil {
-		ClientID, Err := interpolate(Ctx, Spec.OAuth.ClientID, Env)
-		if Err != nil {
-			return nil, fmt.Errorf("resolving oauth.clientId: %w", Err)
+	if spec.OAuth != nil {
+		clientID, err := interpolate(ctx, spec.OAuth.ClientID, env)
+		if err != nil {
+			return nil, fmt.Errorf("resolving oauth.clientId: %w", err)
 		}
-		ClientSecret, Err := interpolate(Ctx, Spec.OAuth.ClientSecret, Env)
-		if Err != nil {
-			return nil, fmt.Errorf("resolving oauth.clientSecret: %w", Err)
+		clientSecret, err := interpolate(ctx, spec.OAuth.ClientSecret, env)
+		if err != nil {
+			return nil, fmt.Errorf("resolving oauth.clientSecret: %w", err)
 		}
 
-		Handler, Err := extauth.NewClientCredentialsHandler(&extauth.ClientCredentialsHandlerConfig{
+		handler, err := extauth.NewClientCredentialsHandler(&extauth.ClientCredentialsHandlerConfig{
 			Credentials: &oauthex.ClientCredentials{
-				ClientID:         ClientID,
-				ClientSecretAuth: &oauthex.ClientSecretAuth{ClientSecret: ClientSecret},
+				ClientID:         clientID,
+				ClientSecretAuth: &oauthex.ClientSecretAuth{ClientSecret: clientSecret},
 			},
-			HTTPClient: HTTPClient,
+			HTTPClient: hTTPClient,
 		})
-		if Err != nil {
-			return nil, Err
+		if err != nil {
+			return nil, err
 		}
-		Transport.OAuthHandler = auth.OAuthHandler(Handler)
+		transport.OAuthHandler = auth.OAuthHandler(handler)
 	}
 
-	return Transport, nil
+	return transport, nil
 }
 
 // headerRoundTripper adds a fixed set of headers to every outgoing request.
@@ -67,11 +67,11 @@ type headerRoundTripper struct {
 	Base    http.RoundTripper
 }
 
-func (Rt *headerRoundTripper) RoundTrip(Req *http.Request) (*http.Response, error) {
+func (rt *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Clone so we never mutate a request the caller may reuse.
-	Req = Req.Clone(Req.Context())
-	for Key, Val := range Rt.Headers {
-		Req.Header.Set(Key, Val)
+	req = req.Clone(req.Context())
+	for key, val := range rt.Headers {
+		req.Header.Set(key, val)
 	}
-	return Rt.Base.RoundTrip(Req)
+	return rt.Base.RoundTrip(req)
 }

@@ -19,28 +19,28 @@ func newAgentMCPCmd() *cobra.Command {
 	}
 }
 
-func runAgentMCP(Cmd *cobra.Command, _ []string) error {
-	Ctx := Cmd.Context()
-	if Ctx == nil {
-		Ctx = context.Background()
+func runAgentMCP(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
-	Config, Err := proxy.LoadConfig()
-	if Err != nil {
-		return fmt.Errorf("loading config: %w", Err)
+	config, err := proxy.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
 	}
 
-	Manager := proxy.NewManager(Config)
-	if Err := Manager.Start(Ctx); Err != nil {
-		return fmt.Errorf("starting downstream servers: %w", Err)
+	manager := proxy.NewManager(config)
+	if err := manager.Start(ctx); err != nil {
+		return fmt.Errorf("starting downstream servers: %w", err)
 	}
-	defer Manager.Close()
+	defer manager.Close()
 
-	Server := mcp.NewServer(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
-	mcptools.Register(Server, Manager)
+	server := mcp.NewServer(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
+	mcptools.Register(server, manager)
 
-	if Err := Server.Run(Ctx, &mcp.StdioTransport{}); Err != nil {
-		return fmt.Errorf("mcp server error: %w", Err)
+	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		return fmt.Errorf("mcp server error: %w", err)
 	}
 
 	return nil

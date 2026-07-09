@@ -8,10 +8,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func writeFile(t *testing.T, Path, Content string) {
+func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if Err := os.WriteFile(Path, []byte(Content), 0o644); Err != nil {
-		t.Fatalf("writing %s: %v", Path, Err)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
 	}
 }
 
@@ -36,13 +36,13 @@ func megaTool() *mcp.Tool {
 
 func TestScoreToolWeights(t *testing.T) {
 	// name hit = 6, description hit = 3, schema hit = 1, per matched term.
-	Cases := []struct {
-		Name         string
-		Tool         *mcp.Tool
-		Terms        []string
-		WantScore    int
-		WantTerms    int
-		WantFields   []string
+	cases := []struct {
+		Name       string
+		Tool       *mcp.Tool
+		Terms      []string
+		WantScore  int
+		WantTerms  int
+		WantFields []string
 	}{
 		{
 			Name:       "name only",
@@ -86,27 +86,27 @@ func TestScoreToolWeights(t *testing.T) {
 		},
 	}
 
-	for _, C := range Cases {
-		t.Run(C.Name, func(t *testing.T) {
-			S, Ok := scoreTool("srv", C.Tool, C.Terms)
-			if !Ok {
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			s, ok := scoreTool("srv", c.Tool, c.Terms)
+			if !ok {
 				t.Fatalf("expected a match")
 			}
-			if S.Score != C.WantScore {
-				t.Errorf("score = %d, want %d", S.Score, C.WantScore)
+			if s.Score != c.WantScore {
+				t.Errorf("score = %d, want %d", s.Score, c.WantScore)
 			}
-			if S.TermsMatched != C.WantTerms {
-				t.Errorf("termsMatched = %d, want %d", S.TermsMatched, C.WantTerms)
+			if s.TermsMatched != c.WantTerms {
+				t.Errorf("termsMatched = %d, want %d", s.TermsMatched, c.WantTerms)
 			}
-			if !equal(S.Ref.MatchedFields, C.WantFields) {
-				t.Errorf("matchedFields = %v, want %v", S.Ref.MatchedFields, C.WantFields)
+			if !equal(s.Ref.MatchedFields, c.WantFields) {
+				t.Errorf("matchedFields = %v, want %v", s.Ref.MatchedFields, c.WantFields)
 			}
 		})
 	}
 }
 
 func TestScoreToolNoMatch(t *testing.T) {
-	if _, Ok := scoreTool("srv", &mcp.Tool{Name: "a", Description: "b"}, []string{"nope"}); Ok {
+	if _, ok := scoreTool("srv", &mcp.Tool{Name: "a", Description: "b"}, []string{"nope"}); ok {
 		t.Error("expected no match")
 	}
 }
@@ -114,58 +114,58 @@ func TestScoreToolNoMatch(t *testing.T) {
 func TestSortByRelevanceBreadthFirst(t *testing.T) {
 	// A tool matching 2 terms (only in schema, low field score) must outrank a
 	// tool matching 1 term with a high field score (name). Breadth wins.
-	Scored := []toolScore{
+	scored := []toolScore{
 		{Ref: ToolRef{Name: "name_hit"}, TermsMatched: 1, Score: 6},
 		{Ref: ToolRef{Name: "two_schema_hits"}, TermsMatched: 2, Score: 2},
 	}
-	sortByRelevance(Scored)
-	if Scored[0].Ref.Name != "two_schema_hits" {
-		t.Errorf("breadth-first failed: top = %q, want two_schema_hits", Scored[0].Ref.Name)
+	sortByRelevance(scored)
+	if scored[0].Ref.Name != "two_schema_hits" {
+		t.Errorf("breadth-first failed: top = %q, want two_schema_hits", scored[0].Ref.Name)
 	}
 }
 
 func TestSortByRelevanceFieldTiebreak(t *testing.T) {
 	// Same breadth → higher field score wins.
-	Scored := []toolScore{
+	scored := []toolScore{
 		{Ref: ToolRef{Name: "schema"}, TermsMatched: 1, Score: 1},
 		{Ref: ToolRef{Name: "name"}, TermsMatched: 1, Score: 6},
 	}
-	sortByRelevance(Scored)
-	if Scored[0].Ref.Name != "name" {
-		t.Errorf("field tiebreak failed: top = %q, want name", Scored[0].Ref.Name)
+	sortByRelevance(scored)
+	if scored[0].Ref.Name != "name" {
+		t.Errorf("field tiebreak failed: top = %q, want name", scored[0].Ref.Name)
 	}
 }
 
 func TestNormalizeTerms(t *testing.T) {
-	Got := normalizeTerms([]string{" Calendar ", "", "  ", "MEETING"})
-	Want := []string{"calendar", "meeting"}
-	if !equal(Got, Want) {
-		t.Errorf("normalizeTerms = %v, want %v", Got, Want)
+	got := normalizeTerms([]string{" Calendar ", "", "  ", "MEETING"})
+	want := []string{"calendar", "meeting"}
+	if !equal(got, want) {
+		t.Errorf("normalizeTerms = %v, want %v", got, want)
 	}
 }
 
 // Both guards fire before any downstream connection, so an empty manager
 // exercises them without spawning anything.
 func TestSearchRejectsEmptyQuery(t *testing.T) {
-	Mgr := NewManager(&Config{Servers: map[string]ServerConfig{}})
-	if _, Err := Mgr.Search(context.Background(), []string{"  ", ""}, "", 0); Err == nil {
+	mgr := NewManager(&Config{Servers: map[string]ServerConfig{}})
+	if _, err := mgr.Search(context.Background(), []string{"  ", ""}, "", 0); err == nil {
 		t.Error("expected error for empty query, got nil")
 	}
 }
 
 func TestSearchRejectsLimitOverMax(t *testing.T) {
-	Mgr := NewManager(&Config{Servers: map[string]ServerConfig{}})
-	if _, Err := Mgr.Search(context.Background(), []string{"calendar"}, "", MaxSearchLimit+1); Err == nil {
+	mgr := NewManager(&Config{Servers: map[string]ServerConfig{}})
+	if _, err := mgr.Search(context.Background(), []string{"calendar"}, "", MaxSearchLimit+1); err == nil {
 		t.Errorf("expected error for limit > %d, got nil", MaxSearchLimit)
 	}
 }
 
-func equal(A, B []string) bool {
-	if len(A) != len(B) {
+func equal(a, b []string) bool {
+	if len(a) != len(b) {
 		return false
 	}
-	for I := range A {
-		if A[I] != B[I] {
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}
