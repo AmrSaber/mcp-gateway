@@ -1,7 +1,8 @@
-// mcp-gateway-inject — opencode plugin: teach the agent about the lazy-loaded MCP
-// servers once (system prompt) and feed it the live server list every turn
-// (messages), so it always knows which gated servers exist and what they do —
-// without their full tool schemas ever entering context.
+// mcp-gateway-inject — opencode plugin: teach the agent about mcp-gateway, the
+// gateway that fronts the other MCP servers, once (system prompt) and feed it
+// the live server list every turn (messages), so it always knows which servers
+// exist behind the gateway and what they do — without their full tool schemas
+// ever entering context.
 //
 // Two hooks, deliberately split (mirrors the jumper plugin pattern):
 //
@@ -36,8 +37,9 @@ const BLOCK_OPEN = '<mcp-gateway-servers>';
 const BLOCK_CLOSE = '</mcp-gateway-servers>';
 
 const SYSTEM_PRIMER = [
-  'Some MCP servers are lazy-loaded: their tools are hidden from your context to save tokens.',
-  `The available lazy servers are injected each turn in a \`${BLOCK_OPEN}\` block (name: description).`,
+  'mcp-gateway is a single gateway that fronts many MCP servers. Their tools are not loaded into your',
+  'context up front (that would cost too many tokens) — you reach them on demand through the gateway.',
+  `The servers available behind the gateway are injected each turn in a \`${BLOCK_OPEN}\` block (name: description).`,
   'To use any of their tools:',
   '1. `mcp_search` with a list of keywords (not a sentence) to discover tools. Results are ranked',
   '   primarily by HOW MANY of your keywords a tool matches (broadest coverage first), then by where',
