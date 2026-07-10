@@ -1,21 +1,26 @@
 # mcp-gateway
 
-A lazy-loading MCP proxy. It hides the tool schemas of heavy MCP servers from
-the agent's context to save tokens, exposing instead a small fixed surface of
-meta-tools the agent uses to discover and call the hidden tools on demand.
+mcp-gateway is a single MCP server that fronts many others. It keeps their tool
+schemas out of the agent's context: instead of dozens of tools costing 50–70k
+tokens up front, the agent sees three small meta-tools and pulls in only the
+schemas it actually needs, on demand. Add as many servers as you like — the
+context cost stays flat.
 
 ## The problem
 
 Every MCP server an agent connects to injects all of its tool schemas into the
 LLM context at startup. A couple of large servers can eat 50–70k tokens before
-the first message. Most of those tools are irrelevant to any given session.
+the first message — and most of those tools are irrelevant to any given session.
+The more servers you add, the worse it gets, so useful tools go unconnected just
+to keep the context lean.
 
 ## How it works
 
-`mcp-gateway` runs as a single MCP server (the proxy). The agent sees only three
-meta-tools instead of the ~dozens of tools the gated servers actually expose:
+mcp-gateway runs as a single MCP server (the proxy) in front of all the others.
+The agent sees only three meta-tools instead of the dozens the fronted servers
+actually expose:
 
-- `mcp_search({ query, server?, limit? })` — find gated tools by keyword.
+- `mcp_search({ query, server?, limit? })` — find tools by keyword.
   `query` is a required, non-empty list of keywords; a tool matches if any term
   appears in its name, description, or input schema (case-insensitive). Results
   are ranked **breadth-first**: by how many distinct keywords match (coverage of
@@ -29,13 +34,16 @@ meta-tools instead of the ~dozens of tools the gated servers actually expose:
   a search hit's `matchedFields` includes `"input schema"`: mega-tools that wrap
   many sub-operations bury their real capabilities — routes, options — in
   parameter descriptions, which search matches on but does not return.
-- `mcp_call({ server, tool, args })` — invoke a gated tool, returns its result.
+- `mcp_call({ server, tool, args })` — invoke a tool, returns its result.
 
-The proxy spawns each gated server as a persistent subprocess and proxies calls
-to it over stdio, so in-memory server state survives across calls within a
+A typical flow is `search` → `describe` (only when a hit's `matchedFields`
+includes `"input schema"`) → `call`. Most tasks skip `describe` entirely.
+
+The proxy spawns each fronted server as a persistent subprocess and proxies
+calls to it over stdio, so in-memory server state survives across calls within a
 session.
 
-A companion opencode plugin injects the list of gated servers (name +
+A companion opencode plugin injects the list of fronted servers (name +
 description) into context each turn, so the agent knows what exists without
 paying for the full tool schemas. It does **not** inject the tools themselves.
 
@@ -147,13 +155,13 @@ MCP server:
 mcp-gateway agent mcp                     # run the proxy (stdio) — this is the opencode mcp entry
 mcp-gateway agent plugin <agent> [--path] # print or write the plugin for an agent (e.g. opencode)
 mcp-gateway agent setup <agent>           # install the plugin into the agent's config dir
-mcp-gateway servers list [-o yaml|json]   # list gated servers (yaml default; json for the plugin)
+mcp-gateway servers list [-o yaml|json]   # list fronted servers (yaml default; json for the plugin)
 ```
 
 ## opencode wiring
 
-Add the proxy to `opencode.json` and remove the gated servers from its `mcp`
-block:
+Add the proxy to `opencode.json` and remove the now-fronted servers from its
+`mcp` block:
 
 ```jsonc
 "mcp": {
