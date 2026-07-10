@@ -1,4 +1,4 @@
-// Package mcp wires the lazy-mcp proxy's meta-tools onto an MCP server. These
+// Package mcp wires the mcp-gateway proxy's meta-tools onto an MCP server. These
 // are thin controllers: each handler validates/adapts and delegates to the
 // proxy.Manager service.
 package mcp
@@ -6,7 +6,7 @@ package mcp
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"lazy-mcp/internal/proxy"
+	"mcp-gateway/internal/proxy"
 )
 
 // Register wires the three meta-tools onto Server, backed by Manager.

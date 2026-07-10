@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"lazy-mcp/internal/proxy"
+	"mcp-gateway/internal/proxy"
 )
 
 func newServersListCmd() *cobra.Command {

@@ -23,7 +23,7 @@ const (
 	SpawnLazy  SpawnMode = "lazy"
 )
 
-// Config is the parsed lazy-mcp.json.
+// Config is the parsed mcp-gateway.json.
 type Config struct {
 	Servers map[string]ServerConfig `json:"servers"`
 }
@@ -68,7 +68,7 @@ type ServerSpec struct {
 func (spec ServerSpec) IsRemote() bool { return spec.URL != "" }
 
 // OAuthConfig configures pre-registered OAuth client credentials for a remote
-// server. Both fields are required: lazy-mcp uses the client-credentials grant
+// server. Both fields are required: mcp-gateway uses the client-credentials grant
 // (service-to-service, no user interaction), which needs a confidential client.
 // The token endpoint and scopes are discovered automatically from server
 // metadata. The interactive (browser) authorization-code flow with token
@@ -147,9 +147,8 @@ func (dur Duration) OrDefault() time.Duration {
 	return time.Duration(dur)
 }
 
-// ConfigDir resolves opencode's config directory: OPENCODE_CONFIG_DIR if set,
-// else $XDG_CONFIG_HOME/opencode, else ~/.config/opencode. Mirrors opencode's
-// own resolution for the common case.
+// ConfigDir resolves the config directory: OPENCODE_CONFIG_DIR if set,
+// else $XDG_CONFIG_HOME, else ~/.config.
 func ConfigDir() (string, error) {
 	if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
 		return dir, nil
@@ -169,15 +168,15 @@ func ConfigDir() (string, error) {
 }
 
 // ConfigPath resolves the config file in the config dir, preferring
-// lazy-mcp.jsonc over lazy-mcp.json. It returns an error if neither exists.
+// mcp-gateway.jsonc over mcp-gateway.json. It returns an error if neither exists.
 func ConfigPath() (string, error) {
 	dir, err := ConfigDir()
 	if err != nil {
 		return "", err
 	}
 
-	jsonc := filepath.Join(dir, "lazy-mcp.jsonc")
-	json := filepath.Join(dir, "lazy-mcp.json")
+	jsonc := filepath.Join(dir, "mcp-gateway.jsonc")
+	json := filepath.Join(dir, "mcp-gateway.json")
 	for _, path := range []string{jsonc, json} {
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
@@ -196,7 +195,7 @@ func LoadConfig() (*Config, error) {
 	return LoadConfigFrom(path)
 }
 
-// LoadConfigFrom reads and parses lazy-mcp.json from an explicit path.
+// LoadConfigFrom reads and parses mcp-gateway.json from an explicit path.
 func LoadConfigFrom(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

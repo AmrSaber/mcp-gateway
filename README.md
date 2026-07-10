@@ -1,4 +1,4 @@
-# lazy-mcp
+# mcp-gateway
 
 A lazy-loading MCP proxy. It hides the tool schemas of heavy MCP servers from
 the agent's context to save tokens, exposing instead a small fixed surface of
@@ -12,7 +12,7 @@ the first message. Most of those tools are irrelevant to any given session.
 
 ## How it works
 
-`lazy-mcp` runs as a single MCP server (the proxy). The agent sees only three
+`mcp-gateway` runs as a single MCP server (the proxy). The agent sees only three
 meta-tools instead of the ~dozens of tools the gated servers actually expose:
 
 - `mcp_search({ query, server?, limit? })` — find gated tools by keyword.
@@ -39,7 +39,7 @@ A companion opencode plugin injects the list of gated servers (name +
 description) into context each turn, so the agent knows what exists without
 paying for the full tool schemas. It does **not** inject the tools themselves.
 
-## Configuration: `lazy-mcp.json`
+## Configuration: `mcp-gateway.json`
 
 Lives next to `opencode.json` in the opencode config dir
 (`$OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`, else
@@ -127,7 +127,7 @@ is two-phase: `environment` values are resolved first (against the process env),
 then the resolved map feeds everything else — so a header can reference an
 `environment` value that is itself computed by a `{cmd:...}`.
 
-lazy-mcp never learns about any specific secret store: the author supplies the
+mcp-gateway never learns about any specific secret store: the author supplies the
 command. For example, pulling a GitHub PAT from a `kv` CLI for the hosted GitHub
 MCP server:
 
@@ -144,10 +144,10 @@ MCP server:
 ## CLI
 
 ```
-lazy-mcp agent mcp                     # run the proxy (stdio) — this is the opencode mcp entry
-lazy-mcp agent plugin <agent> [--path] # print or write the plugin for an agent (e.g. opencode)
-lazy-mcp agent setup <agent>           # install the plugin into the agent's config dir
-lazy-mcp servers list [-o yaml|json]   # list gated servers (yaml default; json for the plugin)
+mcp-gateway agent mcp                     # run the proxy (stdio) — this is the opencode mcp entry
+mcp-gateway agent plugin <agent> [--path] # print or write the plugin for an agent (e.g. opencode)
+mcp-gateway agent setup <agent>           # install the plugin into the agent's config dir
+mcp-gateway servers list [-o yaml|json]   # list gated servers (yaml default; json for the plugin)
 ```
 
 ## opencode wiring
@@ -157,11 +157,11 @@ block:
 
 ```jsonc
 "mcp": {
-  "lazy-mcp": { "type": "local", "command": ["lazy-mcp", "agent", "mcp"], "enabled": true }
+  "mcp-gateway": { "type": "local", "command": ["mcp-gateway", "agent", "mcp"], "enabled": true }
 }
 ```
 
-Then `lazy-mcp agent setup opencode` to install the injection plugin.
+Then `mcp-gateway agent setup opencode` to install the injection plugin.
 
 ## Future work
 
@@ -175,8 +175,8 @@ Then `lazy-mcp agent setup opencode` to install the injection plugin.
   (streamable HTTP), with static `headers` and pre-registered client-credentials
   `oauth`. Still deferred: the **interactive OAuth flow** (browser
   authorization-code grant with dynamic client registration and on-disk token
-  storage, as opencode does with `opencode mcp auth`). lazy-mcp runs headless as
-  a stdio subprocess, so this needs its own `lazy-mcp mcp auth <server>` command
+  storage, as opencode does with `opencode mcp auth`). mcp-gateway runs headless as
+  a stdio subprocess, so this needs its own `mcp-gateway mcp auth <server>` command
   and token store.
 - **Stage 2: plugin-registered proxy.** Experiment with the plugin adding the
   proxy via `client.mcp.add()` so it need not live in `opencode.json`.

@@ -57,7 +57,7 @@ func TestServerConfigIsEnabled(t *testing.T) {
 
 func TestLoadConfigFrom(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "lazy-mcp.json")
+	path := filepath.Join(dir, "mcp-gateway.json")
 
 	writeFile(t, path, `{
 	  "servers": {
@@ -114,7 +114,7 @@ func TestLoadConfigFrom(t *testing.T) {
 
 func TestLoadConfigJSONC(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "lazy-mcp.jsonc")
+	path := filepath.Join(dir, "mcp-gateway.jsonc")
 
 	writeFile(t, path, `{
 	  // a leading comment
@@ -151,7 +151,7 @@ func TestLoadConfigValidation(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := filepath.Join(dir, "lazy-mcp.json")
+			path := filepath.Join(dir, "mcp-gateway.json")
 			writeFile(t, path, c.JSON)
 			if _, err := LoadConfigFrom(path); err == nil {
 				t.Fatalf("expected error for %q, got nil", c.Name)

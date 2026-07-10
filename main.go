@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"lazy-mcp/internal/cmd"
+	"mcp-gateway/internal/cmd"
 )
 
 // version is injected at build time via ldflags: -X main.version=<tag>

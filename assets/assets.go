@@ -1,10 +1,10 @@
-// Package assets embeds the agent-integration files shipped by lazy-mcp.
+// Package assets embeds the agent-integration files shipped by mcp-gateway.
 package assets
 
 import _ "embed"
 
-// OpencodePlugin is the lazy-mcp opencode plugin, written to
-// ~/.config/opencode/plugins/lazy-mcp-inject.ts by `lazy-mcp agent setup opencode`.
+// OpencodePlugin is the mcp-gateway opencode plugin, written to
+// ~/.config/opencode/plugins/mcp-gateway-inject.ts by `mcp-gateway agent setup opencode`.
 //
-//go:embed lazy-mcp-inject.ts
+//go:embed mcp-gateway-inject.ts
 var OpencodePlugin string

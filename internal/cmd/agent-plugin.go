@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"lazy-mcp/assets"
+	"mcp-gateway/assets"
 )
 
 func newAgentPluginCmd() *cobra.Command {
@@ -16,7 +16,7 @@ func newAgentPluginCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:       "plugin <agent-name>",
-		Short:     fmt.Sprintf("Print the lazy-mcp plugin for an agent to stdout, or write it to a file (%s)", strings.Join(supportedAgents, ", ")),
+		Short:     fmt.Sprintf("Print the mcp-gateway plugin for an agent to stdout, or write it to a file (%s)", strings.Join(supportedAgents, ", ")),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: supportedAgents,
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {

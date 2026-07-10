@@ -16,8 +16,8 @@ import (
 //   - {cmd:...} runs the body via `sh -c` with Env as its environment and is
 //     replaced with the command's trimmed stdout; a non-zero exit is an error.
 //
-// This is the seam that keeps secret stores out of lazy-mcp: the author writes
-// e.g. {cmd:kv get github:pat}, and lazy-mcp only knows "run this and use the
+// This is the seam that keeps secret stores out of mcp-gateway: the author writes
+// e.g. {cmd:kv get github:pat}, and mcp-gateway only knows "run this and use the
 // output" — never anything about kv itself.
 func interpolate(ctx context.Context, value string, env []string) (string, error) {
 	var out strings.Builder

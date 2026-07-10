@@ -1,4 +1,4 @@
-module lazy-mcp
+module mcp-gateway
 
 go 1.26.4
 

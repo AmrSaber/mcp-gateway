@@ -1,4 +1,4 @@
-// Package cmd contains the lazy-mcp CLI commands. These are thin controllers:
+// Package cmd contains the mcp-gateway CLI commands. These are thin controllers:
 // they parse args and delegate to the proxy service.
 package cmd
 
@@ -13,7 +13,7 @@ import (
 // NewRootCmd builds the root cobra command.
 func NewRootCmd(version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:     "lazy-mcp",
+		Use:     "mcp-gateway",
 		Short:   "Lazy-loading MCP proxy — gate heavy MCP servers behind a small meta-tool surface",
 		Version: resolveVersion(version),
 	}

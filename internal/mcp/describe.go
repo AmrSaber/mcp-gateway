@@ -7,7 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"lazy-mcp/internal/proxy"
+	"mcp-gateway/internal/proxy"
 )
 
 // DescribeArgs are the inputs to mcp_describe.

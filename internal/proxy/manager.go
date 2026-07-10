@@ -384,7 +384,7 @@ func connect(ctx context.Context, name string, srv ServerConfig) (*Downstream, e
 		return nil, fmt.Errorf("configuring transport for %q: %w", name, err)
 	}
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "lazy-mcp", Version: "0.1.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-gateway", Version: "0.1.0"}, nil)
 
 	session, err := client.Connect(connectCtx, transport, nil)
 	if err != nil {

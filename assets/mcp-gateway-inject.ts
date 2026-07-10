@@ -1,4 +1,4 @@
-// lazy-mcp-inject — opencode plugin: teach the agent about the lazy-loaded MCP
+// mcp-gateway-inject — opencode plugin: teach the agent about the lazy-loaded MCP
 // servers once (system prompt) and feed it the live server list every turn
 // (messages), so it always knows which gated servers exist and what they do —
 // without their full tool schemas ever entering context.
@@ -6,11 +6,11 @@
 // Two hooks, deliberately split (mirrors the jumper plugin pattern):
 //
 //   experimental.chat.system.transform — push a STATIC primer into the system
-//     prompt: what lazy-mcp is and the search → describe → call workflow. This
+//     prompt: what mcp-gateway is and the search → describe → call workflow. This
 //     stays valid across the whole session.
 //
 //   experimental.chat.messages.transform — push the live server list (name +
-//     description) fetched from `lazy-mcp servers list -o json`. This hook
+//     description) fetched from `mcp-gateway servers list -o json`. This hook
 //     fires per outgoing LLM request and mutates only that payload — never
 //     written back to stored history — so the model sees exactly one fresh copy
 //     per turn and nothing accumulates.
@@ -19,10 +19,10 @@
 // to model-message conversion; reassigning output.messages is a no-op. We push
 // onto an existing message's parts array in place.
 //
-// Best-effort throughout — if lazy-mcp is missing, errors, or returns nothing,
+// Best-effort throughout — if mcp-gateway is missing, errors, or returns nothing,
 // we inject nothing and never disrupt the request.
 //
-// Opt-out: LAZY_MCP_INJECT=false|0|no suppresses both injections.
+// Opt-out: MCP_GATEWAY_INJECT=false|0|no suppresses both injections.
 //
 // NOTE (Stage 1): this plugin only INJECTS the server list. The proxy itself is
 // added to opencode via opencode.json manually. Stage 2 will experiment with
@@ -30,10 +30,10 @@
 
 import type { Plugin } from '@opencode-ai/plugin';
 
-const INJECT_ENABLED = !['false', '0', 'no'].includes((process.env.LAZY_MCP_INJECT ?? '').toLowerCase());
+const INJECT_ENABLED = !['false', '0', 'no'].includes((process.env.MCP_GATEWAY_INJECT ?? '').toLowerCase());
 
-const BLOCK_OPEN = '<lazy-mcp-servers>';
-const BLOCK_CLOSE = '</lazy-mcp-servers>';
+const BLOCK_OPEN = '<mcp-gateway-servers>';
+const BLOCK_CLOSE = '</mcp-gateway-servers>';
 
 const SYSTEM_PRIMER = [
   'Some MCP servers are lazy-loaded: their tools are hidden from your context to save tokens.',
@@ -50,12 +50,12 @@ const SYSTEM_PRIMER = [
   'Do not conclude a capability is missing from an empty search — try broader/alternative keywords first.',
 ].join('\n');
 
-export const LazyMcpInject: Plugin = async ({ $ }) => {
-  // Fork `lazy-mcp servers list -o json` and render it as a compact
+export const McpGatewayInject: Plugin = async ({ $ }) => {
+  // Fork `mcp-gateway servers list -o json` and render it as a compact
   // `name: description` block. Returns '' on any failure or when empty.
   async function renderServers(): Promise<string> {
     try {
-      const res = await $`lazy-mcp servers list -o json`.quiet().nothrow();
+      const res = await $`mcp-gateway servers list -o json`.quiet().nothrow();
       if (res.exitCode !== 0) return '';
 
       const parsed = JSON.parse(res.stdout.toString());
@@ -91,7 +91,7 @@ export const LazyMcpInject: Plugin = async ({ $ }) => {
         if (!block) return;
 
         target.parts.push({
-          id: `lazy-mcp-inject-${Date.now()}`,
+          id: `mcp-gateway-inject-${Date.now()}`,
           sessionID: target.info.sessionID,
           messageID: target.info.id,
           type: 'text',
@@ -105,4 +105,4 @@ export const LazyMcpInject: Plugin = async ({ $ }) => {
   };
 };
 
-export default LazyMcpInject;
+export default McpGatewayInject;

@@ -14,7 +14,7 @@ var supportedAgents = []string{"opencode"}
 func newAgentSetupCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:       "setup <agent-name>",
-		Short:     fmt.Sprintf("Install lazy-mcp's integration for a supported agent (%s)", strings.Join(supportedAgents, ", ")),
+		Short:     fmt.Sprintf("Install mcp-gateway's integration for a supported agent (%s)", strings.Join(supportedAgents, ", ")),
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: supportedAgents,
 		ValidArgsFunction: func(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
@@ -35,7 +35,7 @@ func newAgentSetupCmd() *cobra.Command {
 					return fmt.Errorf("resolving config directory: %w", err)
 				}
 
-				pluginPath := filepath.Join(configBase, "opencode", "plugins", "lazy-mcp-inject.ts")
+				pluginPath := filepath.Join(configBase, "opencode", "plugins", "mcp-gateway-inject.ts")
 				if err := writeFile(pluginPath, content); err != nil {
 					return fmt.Errorf("writing plugin: %w", err)
 				}
