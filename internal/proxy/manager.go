@@ -23,7 +23,7 @@ import (
 type Manager struct {
 	config *Config
 
-	lock     sync.Mutex
+	lock     sync.RWMutex
 	sessions map[string]*Downstream // keyed by server name
 
 	// connecting dedupes concurrent ensure() calls for the same server so a
@@ -181,8 +181,8 @@ func (manager *Manager) Search(ctx context.Context, queries []string, serverFilt
 		return nil, err
 	}
 
-	manager.lock.Lock()
-	defer manager.lock.Unlock()
+	manager.lock.RLock()
+	defer manager.lock.RUnlock()
 
 	var scored []toolScore
 	for name, down := range manager.sessions {
@@ -368,9 +368,9 @@ func (manager *Manager) ensureAll(ctx context.Context) error {
 // call repeatedly and concurrently; the connection is cached and concurrent
 // callers for the same server share a single connect via singleflight.
 func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, error) {
-	manager.lock.Lock()
+	manager.lock.RLock()
 	down, ok := manager.sessions[name]
-	manager.lock.Unlock()
+	manager.lock.RUnlock()
 	if ok {
 		return down, nil
 	}
@@ -379,14 +379,14 @@ func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, e
 	// parallel, and dedupe concurrent connects of the same server.
 	res, err, _ := manager.connecting.Do(name, func() (any, error) {
 		// Re-check under lock: a prior singleflight winner may have populated it.
-		manager.lock.Lock()
+		manager.lock.RLock()
 		if down, ok := manager.sessions[name]; ok {
-			manager.lock.Unlock()
+			manager.lock.RUnlock()
 			return down, nil
 		}
 
 		srv, ok := manager.config.Servers[name]
-		manager.lock.Unlock()
+		manager.lock.RUnlock()
 
 		if !ok {
 			return nil, fmt.Errorf("unknown server %q", name)
