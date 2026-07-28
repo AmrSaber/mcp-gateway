@@ -186,7 +186,7 @@ func TestEnsureDedupesConcurrentConnects(t *testing.T) {
 	connect = func(_ context.Context, name string, _ ServerConfig) (*Downstream, error) {
 		connects.Add(1)
 		time.Sleep(10 * time.Millisecond) // widen the race window
-		return &Downstream{Name: name}, nil
+		return &Downstream{name: name}, nil
 	}
 
 	mgr := NewManager(&Config{Servers: map[string]ServerConfig{"srv": {}}})

@@ -1,4 +1,4 @@
-// Package proxy: Handles coordination and communication with proxied MCP servers
+// Package proxy handles coordination and communication with the fronted MCP servers.
 package proxy
 
 import (
@@ -32,12 +32,11 @@ type Manager struct {
 	connecting singleflight.Group
 }
 
-// Downstream is one connected (or connectable) gated server.
+// Downstream is one connected (or connectable) fronted server.
 type Downstream struct {
-	Name    string
-	Config  ServerConfig
-	Session *mcp.ClientSession
-	Tools   []*mcp.Tool
+	name    string
+	session *mcp.ClientSession
+	tools   []*mcp.Tool
 }
 
 // ToolRef is a search result: a tool paired with its owning server.
@@ -80,7 +79,7 @@ func (manager *Manager) Start(ctx context.Context) error {
 	var errs []error
 
 	for name, srv := range manager.config.Servers {
-		if !srv.IsEnabled() || srv.Spawn == SpawnLazy {
+		if !srv.isEnabled() || srv.Spawn == spawnLazy {
 			continue
 		}
 
@@ -103,8 +102,8 @@ func (manager *Manager) Close() {
 	defer manager.lock.Unlock()
 
 	for _, down := range manager.sessions {
-		if down.Session != nil {
-			_ = down.Session.Close()
+		if down.session != nil {
+			_ = down.session.Close()
 		}
 	}
 
@@ -116,7 +115,7 @@ func (manager *Manager) Close() {
 func (manager *Manager) Servers() []ServerInfo {
 	var out []ServerInfo
 	for name, srv := range manager.config.Servers {
-		if !srv.IsEnabled() {
+		if !srv.isEnabled() {
 			continue
 		}
 
@@ -150,11 +149,12 @@ type toolScore struct {
 	Score        int // field-weighted score (tiebreak)
 }
 
-// Search finds gated tools matching the query terms, ranked by relevance.
+// Search finds fronted tools matching the query terms, ranked by relevance.
 //
 // Queries must contain at least one non-blank term — an empty query fails
 // rather than returning everything, since dumping all tools would defeat the
-// point of lazy-loading. Limit defaults to DefaultSearchLimit when <= 0 and may
+// gateway's whole point (keeping tools out of the agent's context). Limit
+// defaults to DefaultSearchLimit when <= 0 and may
 // not exceed MaxSearchLimit (exceeding it is an error, not a silent clamp). When
 // ServerFilter is non-empty, results are limited to that server.
 //
@@ -189,7 +189,7 @@ func (manager *Manager) Search(ctx context.Context, queries []string, serverFilt
 		if serverFilter != "" && name != serverFilter {
 			continue
 		}
-		scored = append(scored, scoreTools(name, down.Tools, terms)...)
+		scored = append(scored, scoreTools(name, down.tools, terms)...)
 	}
 
 	sortByRelevance(scored)
@@ -328,7 +328,7 @@ func (manager *Manager) Describe(ctx context.Context, server, tool string) (any,
 		return nil, err
 	}
 
-	for _, t := range down.Tools {
+	for _, t := range down.tools {
 		if t.Name == tool {
 			return t.InputSchema, nil
 		}
@@ -344,7 +344,7 @@ func (manager *Manager) Call(ctx context.Context, server, tool string, args any)
 		return nil, err
 	}
 
-	return down.Session.CallTool(ctx, &mcp.CallToolParams{
+	return down.session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      tool,
 		Arguments: args,
 	})
@@ -354,7 +354,7 @@ func (manager *Manager) Call(ctx context.Context, server, tool string, args any)
 // a broad query sees the full catalog even for lazy servers.
 func (manager *Manager) ensureAll(ctx context.Context) error {
 	for name, srv := range manager.config.Servers {
-		if !srv.IsEnabled() {
+		if !srv.isEnabled() {
 			continue
 		}
 		if _, err := manager.ensure(ctx, name); err != nil {
@@ -391,7 +391,7 @@ func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, e
 		if !ok {
 			return nil, fmt.Errorf("unknown server %q", name)
 		}
-		if !srv.IsEnabled() {
+		if !srv.isEnabled() {
 			return nil, fmt.Errorf("server %q is disabled", name)
 		}
 
@@ -418,7 +418,7 @@ func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, e
 // for remote (URL) servers. It is a var so tests can stub it without spawning
 // real subprocesses.
 var connect = func(ctx context.Context, name string, srv ServerConfig) (*Downstream, error) {
-	connectCtx, cancel := context.WithTimeout(ctx, srv.Timeout.OrDefault())
+	connectCtx, cancel := context.WithTimeout(ctx, srv.Timeout.orDefault())
 	defer cancel()
 
 	transport, err := transportFor(ctx, srv.Server)
@@ -440,10 +440,9 @@ var connect = func(ctx context.Context, name string, srv ServerConfig) (*Downstr
 	}
 
 	return &Downstream{
-		Name:    name,
-		Config:  srv,
-		Session: session,
-		Tools:   listed.Tools,
+		name:    name,
+		session: session,
+		tools:   listed.Tools,
 	}, nil
 }
 
@@ -464,7 +463,7 @@ func transportFor(ctx context.Context, spec ServerSpec) (mcp.Transport, error) {
 	}
 	merged := mergeEnv(resolvedEnv)
 
-	if spec.IsRemote() {
+	if spec.isRemote() {
 		return remoteTransport(ctx, spec, merged)
 	}
 

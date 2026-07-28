@@ -30,13 +30,13 @@ func TestDurationUnmarshal(t *testing.T) {
 
 func TestDurationOrDefault(t *testing.T) {
 	var zero Duration
-	if zero.OrDefault() != DefaultTimeout {
-		t.Errorf("zero OrDefault = %v, want %v", zero.OrDefault(), DefaultTimeout)
+	if zero.orDefault() != DefaultTimeout {
+		t.Errorf("zero OrDefault = %v, want %v", zero.orDefault(), DefaultTimeout)
 	}
 
 	set := Duration(5 * time.Second)
-	if set.OrDefault() != 5*time.Second {
-		t.Errorf("set OrDefault = %v, want 5s", set.OrDefault())
+	if set.orDefault() != 5*time.Second {
+		t.Errorf("set OrDefault = %v, want 5s", set.orDefault())
 	}
 }
 
@@ -44,13 +44,13 @@ func TestServerConfigIsEnabled(t *testing.T) {
 	true := true
 	false := false
 
-	if !(ServerConfig{}).IsEnabled() {
+	if !(ServerConfig{}).isEnabled() {
 		t.Error("omitted enabled should default to true")
 	}
-	if !(ServerConfig{Enabled: &true}).IsEnabled() {
+	if !(ServerConfig{Enabled: &true}).isEnabled() {
 		t.Error("explicit true should be enabled")
 	}
-	if (ServerConfig{Enabled: &false}).IsEnabled() {
+	if (ServerConfig{Enabled: &false}).isEnabled() {
 		t.Error("explicit false should be disabled")
 	}
 }
@@ -76,7 +76,7 @@ func TestLoadConfigFrom(t *testing.T) {
 	  }
 	}`)
 
-	cfg, err := LoadConfigFrom(path)
+	cfg, err := loadConfigFrom(path)
 	if err != nil {
 		t.Fatalf("LoadConfigFrom: %v", err)
 	}
@@ -85,23 +85,23 @@ func TestLoadConfigFrom(t *testing.T) {
 	if time.Duration(a.Timeout) != 45*time.Second {
 		t.Errorf("a.timeout = %v, want 45s", time.Duration(a.Timeout))
 	}
-	if a.Spawn != SpawnLazy {
+	if a.Spawn != spawnLazy {
 		t.Errorf("a.spawn = %q, want lazy", a.Spawn)
 	}
-	if !a.IsEnabled() {
+	if !a.isEnabled() {
 		t.Error("a should be enabled by default")
 	}
-	if a.Server.IsRemote() {
+	if a.Server.isRemote() {
 		t.Error("a should be local")
 	}
 
 	b := cfg.Servers["b"]
-	if b.IsEnabled() {
+	if b.isEnabled() {
 		t.Error("b should be disabled")
 	}
 
 	c := cfg.Servers["c"]
-	if !c.Server.IsRemote() {
+	if !c.Server.isRemote() {
 		t.Error("c should be remote")
 	}
 	if c.Server.Headers["Authorization"] != "Bearer x" {
@@ -126,7 +126,7 @@ func TestLoadConfigJSONC(t *testing.T) {
 	  }
 	}`)
 
-	cfg, err := LoadConfigFrom(path)
+	cfg, err := loadConfigFrom(path)
 	if err != nil {
 		t.Fatalf("LoadConfigFrom jsonc: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestLoadConfigValidation(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "mcp-gateway.json")
 			writeFile(t, path, c.JSON)
-			if _, err := LoadConfigFrom(path); err == nil {
+			if _, err := loadConfigFrom(path); err == nil {
 				t.Fatalf("expected error for %q, got nil", c.Name)
 			}
 		})

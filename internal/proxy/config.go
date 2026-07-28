@@ -19,8 +19,8 @@ const DefaultTimeout = 30 * time.Second
 type SpawnMode string
 
 const (
-	SpawnEager SpawnMode = "eager"
-	SpawnLazy  SpawnMode = "lazy"
+	spawnEager SpawnMode = "eager"
+	spawnLazy  SpawnMode = "lazy"
 )
 
 // Config is the parsed mcp-gateway.json.
@@ -28,7 +28,7 @@ type Config struct {
 	Servers map[string]ServerConfig `json:"servers"`
 }
 
-// ServerConfig is one gated downstream MCP server: operational settings plus a
+// ServerConfig is one fronted downstream MCP server: operational settings plus a
 // nested Server transport block.
 //
 // Description and Server are required. The other settings have documented
@@ -42,7 +42,7 @@ type ServerConfig struct {
 	Server      ServerSpec `json:"server"`
 }
 
-// ServerSpec is the transport for a gated server. The transport kind is
+// ServerSpec is the transport for a fronted server. The transport kind is
 // inferred from which field is set: Command ⇒ local (stdio subprocess), URL ⇒
 // remote (streamable HTTP). Exactly one must be set (enforced in validation).
 //
@@ -62,10 +62,10 @@ type ServerSpec struct {
 	OAuth   *OAuthConfig      `json:"oauth,omitempty"`
 }
 
-// IsRemote reports whether this is a remote (URL) server rather than a local
+// isRemote reports whether this is a remote (URL) server rather than a local
 // stdio one. Only meaningful after validation has confirmed exactly one of
 // Command/URL is set.
-func (spec ServerSpec) IsRemote() bool { return spec.URL != "" }
+func (spec ServerSpec) isRemote() bool { return spec.URL != "" }
 
 // OAuthConfig configures pre-registered OAuth client credentials for a remote
 // server. Both fields are required: mcp-gateway uses the client-credentials grant
@@ -78,9 +78,9 @@ type OAuthConfig struct {
 	ClientSecret string `json:"clientSecret"`
 }
 
-// IsEnabled reports whether the server should be loaded. Enabled defaults to
+// isEnabled reports whether the server should be loaded. Enabled defaults to
 // true when omitted; only an explicit false skips the server.
-func (config ServerConfig) IsEnabled() bool {
+func (config ServerConfig) isEnabled() bool {
 	return config.Enabled == nil || *config.Enabled
 }
 
@@ -139,38 +139,38 @@ func (dur *Duration) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// OrDefault returns the duration, or DefaultTimeout when unset (zero).
-func (dur Duration) OrDefault() time.Duration {
+// orDefault returns the duration, or DefaultTimeout when unset (zero).
+func (dur Duration) orDefault() time.Duration {
 	if dur == 0 {
 		return DefaultTimeout
 	}
 	return time.Duration(dur)
 }
 
-// ConfigDir resolves the config directory: OPENCODE_CONFIG_DIR if set,
+// configDir resolves the config directory: OPENCODE_CONFIG_DIR if set,
 // else $XDG_CONFIG_HOME, else ~/.config.
-func ConfigDir() (string, error) {
+func configDir() (string, error) {
 	if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
 		return dir, nil
 	}
 
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("resolving home directory: %w", err)
 		}
 
-		configDir = filepath.Join(home, ".config")
+		dir = filepath.Join(home, ".config")
 	}
 
-	return configDir, nil
+	return dir, nil
 }
 
-// ConfigPath resolves the config file in the config dir, preferring
+// configPath resolves the config file in the config dir, preferring
 // mcp-gateway.jsonc over mcp-gateway.json. It returns an error if neither exists.
-func ConfigPath() (string, error) {
-	dir, err := ConfigDir()
+func configPath() (string, error) {
+	dir, err := configDir()
 	if err != nil {
 		return "", err
 	}
@@ -188,15 +188,15 @@ func ConfigPath() (string, error) {
 
 // LoadConfig reads and parses the config from the resolved config dir.
 func LoadConfig() (*Config, error) {
-	path, err := ConfigPath()
+	path, err := configPath()
 	if err != nil {
 		return nil, err
 	}
-	return LoadConfigFrom(path)
+	return loadConfigFrom(path)
 }
 
-// LoadConfigFrom reads and parses mcp-gateway.json from an explicit path.
-func LoadConfigFrom(path string) (*Config, error) {
+// loadConfigFrom reads and parses mcp-gateway.json from an explicit path.
+func loadConfigFrom(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
