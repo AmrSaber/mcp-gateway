@@ -1,4 +1,4 @@
-module mcp-gateway
+module github.com/AmrSaber/mcp-gateway
 
 go 1.26.4
 

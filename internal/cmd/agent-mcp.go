@@ -8,8 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
-	mcptools "mcp-gateway/internal/mcp"
-	"mcp-gateway/internal/proxy"
+	mcptools "github.com/AmrSaber/mcp-gateway/internal/mcp"
+	"github.com/AmrSaber/mcp-gateway/internal/proxy"
 )
 
 func newAgentMCPCmd() *cobra.Command {

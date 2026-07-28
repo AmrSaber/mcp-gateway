@@ -6,7 +6,7 @@ package mcp
 import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"mcp-gateway/internal/proxy"
+	"github.com/AmrSaber/mcp-gateway/internal/proxy"
 )
 
 // Register wires the meta-tools onto Server, backed by Manager.

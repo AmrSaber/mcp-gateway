@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mcp-gateway/assets"
+	"github.com/AmrSaber/mcp-gateway/assets"
 )
 
 func newAgentPluginCmd() *cobra.Command {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"mcp-gateway/internal/proxy"
+	"github.com/AmrSaber/mcp-gateway/internal/proxy"
 )
 
 // CallArgs are the inputs to mcp_call.

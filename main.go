@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"mcp-gateway/internal/cmd"
+	"github.com/AmrSaber/mcp-gateway/internal/cmd"
 )
 
 // version is injected at build time via ldflags: -X main.version=<tag>
