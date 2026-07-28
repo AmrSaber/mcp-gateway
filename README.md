@@ -19,6 +19,22 @@ The proxy spawns each fronted server as a persistent subprocess (or connects to 
 
 A companion opencode plugin injects the list of fronted servers (name + description) into context each turn, so the agent knows what exists without paying for the full tool schemas. It does **not** inject the tools themselves.
 
+## Install
+
+Homebrew (macOS/Linux):
+
+```sh
+brew install AmrSaber/tap/mcp-gateway
+```
+
+Or with Go:
+
+```sh
+go install github.com/AmrSaber/mcp-gateway@latest
+```
+
+Prebuilt binaries for each release are also on the [releases page](https://github.com/AmrSaber/mcp-gateway/releases).
+
 ## Configuration: `mcp-gateway.json`
 
 Lives in the config dir — `$OPENCODE_CONFIG_DIR` if set, else `$XDG_CONFIG_HOME`, else `~/.config` — as `mcp-gateway.jsonc` (preferred) or `mcp-gateway.json`.

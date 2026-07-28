@@ -1,0 +1,66 @@
+# Template from: https://goreleaser.com/customization/build/
+project_name: mcp-gateway
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: mcp-gateway
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - "386"
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - "-s -w -X main.version={{.Version}}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: AmrSaber
+    name: mcp-gateway
+
+# Homebrew tap for macOS and Linux
+homebrew_casks:
+  - repository:
+      owner: AmrSaber
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/AmrSaber/mcp-gateway"
+    description: "A single MCP server that fronts many others, keeping their tool schemas out of the agent's context"
+    binaries: [mcp-gateway]
+    # The binary isn't signed/notarized; strip the macOS quarantine flag so it runs.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mcp-gateway"]
+          end
