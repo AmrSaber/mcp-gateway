@@ -47,6 +47,14 @@ release:
   github:
     owner: AmrSaber
     name: mcp-gateway
+  header: |
+    A single MCP server that fronts all the others, keeping their tool schemas out of the agent's context. Add as many servers as you like — the agent sees a handful of meta-tools and pulls in only the schemas it needs, so the context cost stays flat.
+
+    Install with `brew install AmrSaber/tap/mcp-gateway`, `go install github.com/AmrSaber/mcp-gateway@latest`, or grab a prebuilt binary below. See the [README](https://github.com/AmrSaber/mcp-gateway#readme) to get started.
+
+# Skip the commit-log changelog; the header above says what the release delivers.
+changelog:
+  disable: true
 
 # Homebrew tap for macOS and Linux
 homebrew_casks:
