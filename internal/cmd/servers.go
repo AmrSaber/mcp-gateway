@@ -5,7 +5,7 @@ import "github.com/spf13/cobra"
 func newServersCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "servers",
-		Short: "Inspect the gated (lazy-loaded) MCP servers",
+		Short: "Inspect the MCP servers fronted by the gateway",
 	}
 
 	cmd.AddCommand(newServersListCmd())

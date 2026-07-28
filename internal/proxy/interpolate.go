@@ -31,14 +31,14 @@ func interpolate(ctx context.Context, value string, env []string) (string, error
 		out.WriteString(value[:open])
 		value = value[open:]
 
-		close := strings.Index(value, "}")
-		if close == -1 {
+		end := strings.Index(value, "}")
+		if end == -1 {
 			// Unterminated brace — treat the rest as literal.
 			out.WriteString(value)
 			break
 		}
-		directive := value[1:close]
-		value = value[close+1:]
+		directive := value[1:end]
+		value = value[end+1:]
 
 		resolved, ok, err := resolveDirective(ctx, directive, env)
 		if err != nil {

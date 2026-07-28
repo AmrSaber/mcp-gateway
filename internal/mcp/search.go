@@ -13,15 +13,15 @@ import (
 // SearchArgs are the inputs to mcp_search.
 type SearchArgs struct {
 	Query  []string `json:"query" jsonschema:"one or more search keywords (required, non-empty); a tool matches if its name, description, or input schema contains ANY term (case-insensitive). Pass individual keywords rather than a full sentence, e.g. [\"event\", \"meeting\", \"calendar\"]."`
-	Server string   `json:"server,omitempty" jsonschema:"optional: restrict results to this gated server."`
+	Server string   `json:"server,omitempty" jsonschema:"optional: restrict results to this server."`
 	Limit  int      `json:"limit,omitempty" jsonschema:"optional: max results to return. Defaults to 5; may be raised up to 25. Values above 25 are rejected."`
 }
 
 func searchTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name: "mcp_search",
-		Description: "Search for tools provided by the lazy-loaded MCP servers. " +
-			"These servers' tools are hidden from your context to save tokens — use this to discover them. " +
+		Description: "Search for tools provided by the MCP servers fronted by the gateway. " +
+			"These servers' tools are kept out of your context to save tokens — use this to discover them. " +
 			"Pass 'query' as a non-empty list of keywords (not a full sentence); a tool matches if any term " +
 			"appears in its name, description, or input schema. " +
 			"Results are ranked by how many of your keywords match (broadest coverage first), then by where " +

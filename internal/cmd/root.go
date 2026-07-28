@@ -14,7 +14,7 @@ import (
 func NewRootCmd(version string) *cobra.Command {
 	root := &cobra.Command{
 		Use:     "mcp-gateway",
-		Short:   "Lazy-loading MCP proxy — gate heavy MCP servers behind a small meta-tool surface",
+		Short:   "MCP gateway — front many MCP servers behind a small meta-tool surface",
 		Version: resolveVersion(version),
 	}
 

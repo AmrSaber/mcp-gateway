@@ -15,8 +15,8 @@ func newServersListCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List the gated servers and their descriptions",
-		Long: "List the gated (lazy-loaded) MCP servers and their descriptions.\n\n" +
+		Short: "List the fronted servers and their descriptions",
+		Long: "List the MCP servers fronted by the gateway and their descriptions.\n\n" +
 			"Default output is YAML for readability. Use -o json for the machine-readable\n" +
 			"form the opencode plugin parses to inject the server list into the agent.",
 		RunE: func(_ *cobra.Command, _ []string) error {

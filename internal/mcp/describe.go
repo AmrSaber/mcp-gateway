@@ -12,14 +12,14 @@ import (
 
 // DescribeArgs are the inputs to mcp_describe.
 type DescribeArgs struct {
-	Server string `json:"server" jsonschema:"the gated server the tool belongs to (from mcp_search results)."`
+	Server string `json:"server" jsonschema:"the server the tool belongs to (from mcp_search results)."`
 	Tool   string `json:"tool" jsonschema:"the tool name to describe (from mcp_search results)."`
 }
 
 func describeTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name: "mcp_describe",
-		Description: "Get the full input schema (parameters) for a specific lazy-loaded tool, " +
+		Description: "Get the full input schema (parameters) for a specific tool fronted by the gateway, " +
 			"identified by its server and name (as returned by mcp_search). " +
 			"Use this before mcp_call to learn what arguments the tool expects.",
 	}

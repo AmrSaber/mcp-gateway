@@ -25,14 +25,14 @@ func remoteTransport(ctx context.Context, spec ServerSpec, env []string) (mcp.Tr
 		return nil, fmt.Errorf("resolving headers: %w", err)
 	}
 
-	hTTPClient := &http.Client{}
+	httpClient := &http.Client{}
 	if len(headers) > 0 {
-		hTTPClient.Transport = &headerRoundTripper{Headers: headers, Base: http.DefaultTransport}
+		httpClient.Transport = &headerRoundTripper{Headers: headers, Base: http.DefaultTransport}
 	}
 
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:   spec.URL,
-		HTTPClient: hTTPClient,
+		HTTPClient: httpClient,
 	}
 
 	if spec.OAuth != nil {
@@ -50,7 +50,7 @@ func remoteTransport(ctx context.Context, spec ServerSpec, env []string) (mcp.Tr
 				ClientID:         clientID,
 				ClientSecretAuth: &oauthex.ClientSecretAuth{ClientSecret: clientSecret},
 			},
-			HTTPClient: hTTPClient,
+			HTTPClient: httpClient,
 		})
 		if err != nil {
 			return nil, err
