@@ -1,8 +1,10 @@
+// Package proxy: Handles coordination and communication with proxied MCP servers
 package proxy
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/singleflight"
 )
 
 // Manager owns the downstream MCP servers: it spawns their subprocesses,
@@ -18,10 +21,15 @@ import (
 // the collected tool list. All heavy lifting lives here; the cmd/ and mcp/
 // controllers are thin wrappers over this.
 type Manager struct {
-	Config *Config
+	config *Config
 
-	Mu       sync.Mutex
-	Sessions map[string]*Downstream // keyed by server name
+	lock     sync.Mutex
+	sessions map[string]*Downstream // keyed by server name
+
+	// connecting dedupes concurrent ensure() calls for the same server so a
+	// server is connected (subprocess spawned) at most once, even under
+	// parallel Start / concurrent requests.
+	connecting singleflight.Group
 }
 
 // Downstream is one connected (or connectable) gated server.
@@ -59,51 +67,62 @@ type ServerInfo struct {
 // call Start to connect eager servers.
 func NewManager(config *Config) *Manager {
 	return &Manager{
-		Config:   config,
-		Sessions: make(map[string]*Downstream),
+		config:   config,
+		sessions: make(map[string]*Downstream),
 	}
 }
 
 // Start connects all enabled servers whose spawn mode is eager. Lazy servers
 // are connected on first use (see ensure).
-func (mgr *Manager) Start(ctx context.Context) error {
-	for name, srv := range mgr.Config.Servers {
-		if !srv.IsEnabled() {
+func (manager *Manager) Start(ctx context.Context) error {
+	var wg sync.WaitGroup
+	var errsLock sync.Mutex
+	var errs []error
+
+	for name, srv := range manager.config.Servers {
+		if !srv.IsEnabled() || srv.Spawn == SpawnLazy {
 			continue
 		}
-		if srv.Spawn == SpawnLazy {
-			continue
-		}
-		if _, err := mgr.ensure(ctx, name); err != nil {
-			return fmt.Errorf("connecting %q: %w", name, err)
-		}
+
+		wg.Go(func() {
+			if _, err := manager.ensure(ctx, name); err != nil {
+				errsLock.Lock()
+				errs = append(errs, fmt.Errorf("connecting %q: %w", name, err))
+				errsLock.Unlock()
+			}
+		})
 	}
-	return nil
+
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // Close shuts down every connected downstream, killing subprocesses.
-func (mgr *Manager) Close() {
-	mgr.Mu.Lock()
-	defer mgr.Mu.Unlock()
+func (manager *Manager) Close() {
+	manager.lock.Lock()
+	defer manager.lock.Unlock()
 
-	for _, down := range mgr.Sessions {
+	for _, down := range manager.sessions {
 		if down.Session != nil {
 			_ = down.Session.Close()
 		}
 	}
-	mgr.Sessions = make(map[string]*Downstream)
+
+	manager.sessions = make(map[string]*Downstream)
 }
 
 // Servers returns the enabled servers' name + description, for `servers list`
 // and plugin injection. Independent of connection state.
-func (mgr *Manager) Servers() []ServerInfo {
+func (manager *Manager) Servers() []ServerInfo {
 	var out []ServerInfo
-	for name, srv := range mgr.Config.Servers {
+	for name, srv := range manager.config.Servers {
 		if !srv.IsEnabled() {
 			continue
 		}
+
 		out = append(out, ServerInfo{Name: name, Description: srv.Description})
 	}
+
 	return out
 }
 
@@ -145,7 +164,7 @@ type toolScore struct {
 // stability. Matching considers name + description + serialized input schema so
 // capabilities buried in parameter schemas are still found; the schema itself is
 // not returned (see ToolRef).
-func (mgr *Manager) Search(ctx context.Context, queries []string, serverFilter string, limit int) ([]ToolRef, error) {
+func (manager *Manager) Search(ctx context.Context, queries []string, serverFilter string, limit int) ([]ToolRef, error) {
 	terms := normalizeTerms(queries)
 	if len(terms) == 0 {
 		return nil, fmt.Errorf("search requires at least one non-blank query term")
@@ -158,15 +177,15 @@ func (mgr *Manager) Search(ctx context.Context, queries []string, serverFilter s
 		return nil, fmt.Errorf("limit %d exceeds the maximum of %d", limit, MaxSearchLimit)
 	}
 
-	if err := mgr.ensureAll(ctx); err != nil {
+	if err := manager.ensureAll(ctx); err != nil {
 		return nil, err
 	}
 
-	mgr.Mu.Lock()
-	defer mgr.Mu.Unlock()
+	manager.lock.Lock()
+	defer manager.lock.Unlock()
 
 	var scored []toolScore
-	for name, down := range mgr.Sessions {
+	for name, down := range manager.sessions {
 		if serverFilter != "" && name != serverFilter {
 			continue
 		}
@@ -303,8 +322,8 @@ func sortByRelevance(scored []toolScore) {
 }
 
 // Describe returns the full input schema of one tool on one server.
-func (mgr *Manager) Describe(ctx context.Context, server, tool string) (any, error) {
-	down, err := mgr.ensure(ctx, server)
+func (manager *Manager) Describe(ctx context.Context, server, tool string) (any, error) {
+	down, err := manager.ensure(ctx, server)
 	if err != nil {
 		return nil, err
 	}
@@ -319,8 +338,8 @@ func (mgr *Manager) Describe(ctx context.Context, server, tool string) (any, err
 }
 
 // Call invokes a downstream tool and returns its raw result.
-func (mgr *Manager) Call(ctx context.Context, server, tool string, args any) (*mcp.CallToolResult, error) {
-	down, err := mgr.ensure(ctx, server)
+func (manager *Manager) Call(ctx context.Context, server, tool string, args any) (*mcp.CallToolResult, error) {
+	down, err := manager.ensure(ctx, server)
 	if err != nil {
 		return nil, err
 	}
@@ -333,12 +352,12 @@ func (mgr *Manager) Call(ctx context.Context, server, tool string, args any) (*m
 
 // ensureAll connects every enabled server not yet connected. Used by Search so
 // a broad query sees the full catalog even for lazy servers.
-func (mgr *Manager) ensureAll(ctx context.Context) error {
-	for name, srv := range mgr.Config.Servers {
+func (manager *Manager) ensureAll(ctx context.Context) error {
+	for name, srv := range manager.config.Servers {
 		if !srv.IsEnabled() {
 			continue
 		}
-		if _, err := mgr.ensure(ctx, name); err != nil {
+		if _, err := manager.ensure(ctx, name); err != nil {
 			return fmt.Errorf("connecting %q: %w", name, err)
 		}
 	}
@@ -346,36 +365,59 @@ func (mgr *Manager) ensureAll(ctx context.Context) error {
 }
 
 // ensure returns a connected downstream, connecting it on first use. Safe to
-// call repeatedly; connection is cached.
-func (mgr *Manager) ensure(ctx context.Context, name string) (*Downstream, error) {
-	mgr.Mu.Lock()
-	defer mgr.Mu.Unlock()
-
-	if down, ok := mgr.Sessions[name]; ok {
+// call repeatedly and concurrently; the connection is cached and concurrent
+// callers for the same server share a single connect via singleflight.
+func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, error) {
+	manager.lock.Lock()
+	down, ok := manager.sessions[name]
+	manager.lock.Unlock()
+	if ok {
 		return down, nil
 	}
 
-	srv, ok := mgr.Config.Servers[name]
-	if !ok {
-		return nil, fmt.Errorf("unknown server %q", name)
-	}
-	if !srv.IsEnabled() {
-		return nil, fmt.Errorf("server %q is disabled", name)
-	}
+	// Slow path: connect outside the map lock so different servers connect in
+	// parallel, and dedupe concurrent connects of the same server.
+	res, err, _ := manager.connecting.Do(name, func() (any, error) {
+		// Re-check under lock: a prior singleflight winner may have populated it.
+		manager.lock.Lock()
+		if down, ok := manager.sessions[name]; ok {
+			manager.lock.Unlock()
+			return down, nil
+		}
 
-	down, err := connect(ctx, name, srv)
+		srv, ok := manager.config.Servers[name]
+		manager.lock.Unlock()
+
+		if !ok {
+			return nil, fmt.Errorf("unknown server %q", name)
+		}
+		if !srv.IsEnabled() {
+			return nil, fmt.Errorf("server %q is disabled", name)
+		}
+
+		down, err := connect(ctx, name, srv)
+		if err != nil {
+			return nil, err
+		}
+
+		manager.lock.Lock()
+		defer manager.lock.Unlock()
+		manager.sessions[name] = down
+		return down, nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	mgr.Sessions[name] = down
-	return down, nil
+	return res.(*Downstream), nil
 }
 
 // connect performs the MCP handshake and lists tools over the server's
 // transport: a spawned stdio subprocess for local servers, or streamable HTTP
-// for remote (URL) servers.
-func connect(ctx context.Context, name string, srv ServerConfig) (*Downstream, error) {
+// for remote (URL) servers. It is a var so tests can stub it without spawning
+// real subprocesses.
+var connect = func(ctx context.Context, name string, srv ServerConfig) (*Downstream, error) {
 	connectCtx, cancel := context.WithTimeout(ctx, srv.Timeout.OrDefault())
 	defer cancel()
 

@@ -9,7 +9,7 @@ run = "go build -o ~/.local/bin/mcp-gateway ."
 
 [tasks.test]
 description = "Run vet, lint, and unit tests"
-run = ["go vet ./...", "golangci-lint run ./...", "go test ./..."]
+run = ["go vet ./...", "golangci-lint run ./...", "go test -race ./..."]
 
 [tasks.edit]
 description = "Edit mise file"

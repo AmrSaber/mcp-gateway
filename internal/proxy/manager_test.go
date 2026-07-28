@@ -3,7 +3,10 @@ package proxy
 import (
 	"context"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -170,4 +173,45 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestEnsureDedupesConcurrentConnects verifies concurrent ensure() calls for the
+// same server share a single connect (singleflight), so no server is connected
+// twice and no downstream leaks. Run with -race to catch map races.
+func TestEnsureDedupesConcurrentConnects(t *testing.T) {
+	orig := connect
+	t.Cleanup(func() { connect = orig })
+
+	var connects atomic.Int32
+	connect = func(_ context.Context, name string, _ ServerConfig) (*Downstream, error) {
+		connects.Add(1)
+		time.Sleep(10 * time.Millisecond) // widen the race window
+		return &Downstream{Name: name}, nil
+	}
+
+	mgr := NewManager(&Config{Servers: map[string]ServerConfig{"srv": {}}})
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	downs := make([]*Downstream, goroutines)
+	for i := range goroutines {
+		wg.Go(func() {
+			d, err := mgr.ensure(context.Background(), "srv")
+			if err != nil {
+				t.Errorf("ensure: %v", err)
+				return
+			}
+			downs[i] = d
+		})
+	}
+	wg.Wait()
+
+	if got := connects.Load(); got != 1 {
+		t.Fatalf("expected exactly 1 connect, got %d", got)
+	}
+	for i, d := range downs {
+		if d != downs[0] {
+			t.Fatalf("goroutine %d got a different downstream; cache/dedupe broken", i)
+		}
+	}
 }
