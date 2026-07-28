@@ -1,13 +1,14 @@
 # mcp-gateway
 
-mcp-gateway is a single MCP server that fronts many others. It keeps their tool schemas out of the agent's context: instead of dozens of tools costing 50–70k tokens up front, the agent sees three small meta-tools and pulls in only the schemas it actually needs, on demand. Add as many servers as you like — the context cost stays flat.
+mcp-gateway is a single MCP server that fronts many others. It keeps their tool schemas out of the agent's context: instead of dozens of tools costing 50–70k tokens up front, the agent sees a few small meta-tools and pulls in only the schemas it actually needs, on demand. Add as many servers as you like — the context cost stays flat.
 
 Normally every MCP server an agent connects to injects all of its tool schemas at startup, and most are irrelevant to any given session — so the more servers you add, the more context you burn, and useful servers go unconnected just to keep things lean. The gateway removes that trade-off.
 
 ## How it works
 
-mcp-gateway runs as a single MCP server (the proxy) in front of all the others. The agent sees only three meta-tools instead of the dozens the fronted servers actually expose:
+mcp-gateway runs as a single MCP server (the proxy) in front of all the others. The agent sees only these meta-tools instead of the dozens the fronted servers actually expose:
 
+- `mcp_servers()` — list the fronted servers, one `name: description` per line. The starting point for discovery. The opencode plugin injects this same list every turn, so opencode agents rarely need it; other agents call it to learn what exists.
 - `mcp_search({ query, server?, limit? })` — find tools by keyword. `query` is a required, non-empty list of keywords; a tool matches if any term appears in its name, description, or input schema (case-insensitive). Results are ranked **breadth-first**: by how many distinct keywords match, then by where they matched (name > description > schema). Capped at 5 by default; `limit` may be raised up to 25. Returns `{ server, name, description, matched, matchedFields }` — the input schema is **not** included (see `mcp_describe`).
 - `mcp_describe({ server, tool })` — full input schema for one tool. Needed when a hit's `matchedFields` includes `"input schema"`: mega-tools bury real capabilities (routes, options) in parameter descriptions, which search matches on but does not return.
 - `mcp_call({ server, tool, args })` — invoke a tool, returns its result.
