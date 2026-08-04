@@ -101,12 +101,15 @@ func (manager *Manager) Close() {
 	manager.lock.Lock()
 	defer manager.lock.Unlock()
 
+	var wg sync.WaitGroup
+
 	for _, down := range manager.sessions {
 		if down.session != nil {
-			_ = down.session.Close()
+			wg.Go(func() { _ = down.session.Close() })
 		}
 	}
 
+	wg.Wait()
 	manager.sessions = make(map[string]*Downstream)
 }
 
