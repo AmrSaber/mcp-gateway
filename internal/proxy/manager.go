@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/sync/singleflight"
@@ -73,7 +74,7 @@ func NewManager(config *Config) *Manager {
 
 // Start connects all enabled servers whose spawn mode is eager. Lazy servers
 // are connected on first use (see ensure).
-func (manager *Manager) Start(ctx context.Context) error {
+func (manager *Manager) Start() error {
 	var wg sync.WaitGroup
 	var errsLock sync.Mutex
 	var errs []error
@@ -84,7 +85,7 @@ func (manager *Manager) Start(ctx context.Context) error {
 		}
 
 		wg.Go(func() {
-			if _, err := manager.ensure(ctx, name); err != nil {
+			if _, err := manager.ensure(name); err != nil {
 				errsLock.Lock()
 				errs = append(errs, fmt.Errorf("connecting %q: %w", name, err))
 				errsLock.Unlock()
@@ -96,7 +97,9 @@ func (manager *Manager) Start(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Close shuts down every connected downstream, killing subprocesses.
+// Close shuts down every connected downstream. session.Close does the stdio-spec
+// teardown itself (close stdin, wait, then SIGTERM, then SIGKILL); it's
+// synchronous so callers can defer it and know the subprocesses are gone.
 func (manager *Manager) Close() {
 	manager.lock.Lock()
 	defer manager.lock.Unlock()
@@ -180,7 +183,7 @@ func (manager *Manager) Search(ctx context.Context, queries []string, serverFilt
 		return nil, fmt.Errorf("limit %d exceeds the maximum of %d", limit, MaxSearchLimit)
 	}
 
-	if err := manager.ensureAll(ctx); err != nil {
+	if err := manager.ensureAll(); err != nil {
 		return nil, err
 	}
 
@@ -325,8 +328,8 @@ func sortByRelevance(scored []toolScore) {
 }
 
 // Describe returns the full input schema of one tool on one server.
-func (manager *Manager) Describe(ctx context.Context, server, tool string) (any, error) {
-	down, err := manager.ensure(ctx, server)
+func (manager *Manager) Describe(_ context.Context, server, tool string) (any, error) {
+	down, err := manager.ensure(server)
 	if err != nil {
 		return nil, err
 	}
@@ -340,9 +343,11 @@ func (manager *Manager) Describe(ctx context.Context, server, tool string) (any,
 	return nil, fmt.Errorf("tool %q not found on server %q", tool, server)
 }
 
-// Call invokes a downstream tool and returns its raw result.
+// Call invokes a downstream tool and returns its raw result. The request ctx
+// drives the tool call itself but not connecting — subprocess lifetime is the
+// manager's.
 func (manager *Manager) Call(ctx context.Context, server, tool string, args any) (*mcp.CallToolResult, error) {
-	down, err := manager.ensure(ctx, server)
+	down, err := manager.ensure(server)
 	if err != nil {
 		return nil, err
 	}
@@ -355,27 +360,42 @@ func (manager *Manager) Call(ctx context.Context, server, tool string, args any)
 
 // ensureAll connects every enabled server not yet connected. Used by Search so
 // a broad query sees the full catalog even for lazy servers.
-func (manager *Manager) ensureAll(ctx context.Context) error {
+func (manager *Manager) ensureAll() error {
 	for name, srv := range manager.config.Servers {
 		if !srv.isEnabled() {
 			continue
 		}
-		if _, err := manager.ensure(ctx, name); err != nil {
+		if _, err := manager.ensure(name); err != nil {
 			return fmt.Errorf("connecting %q: %w", name, err)
 		}
 	}
 	return nil
 }
 
-// ensure returns a connected downstream, connecting it on first use. Safe to
-// call repeatedly and concurrently; the connection is cached and concurrent
-// callers for the same server share a single connect via singleflight.
-func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, error) {
+// livenessTimeout bounds the readiness ping ensure sends before reusing a
+// cached downstream. Short: it's a local stdio round-trip.
+const livenessTimeout = 2 * time.Second
+
+// ensure returns a live connected downstream, connecting it on first use and
+// reconnecting it if the cached subprocess has died. Safe to call repeatedly and
+// concurrently; the connection is cached and concurrent callers for the same
+// server share a single connect via singleflight.
+func (manager *Manager) ensure(name string) (*Downstream, error) {
 	manager.lock.RLock()
 	down, ok := manager.sessions[name]
 	manager.lock.RUnlock()
 	if ok {
-		return down, nil
+		// A cached session may point at a dead subprocess; ping before reusing,
+		// else evict and reconnect.
+		if sessionAlive(down) {
+			return down, nil
+		}
+
+		manager.lock.Lock()
+		if manager.sessions[name] == down {
+			delete(manager.sessions, name)
+		}
+		manager.lock.Unlock()
 	}
 
 	// Slow path: connect outside the map lock so different servers connect in
@@ -398,7 +418,7 @@ func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, e
 			return nil, fmt.Errorf("server %q is disabled", name)
 		}
 
-		down, err := connect(ctx, name, srv)
+		down, err := connect(name, srv)
 		if err != nil {
 			return nil, err
 		}
@@ -416,18 +436,33 @@ func (manager *Manager) ensure(ctx context.Context, name string) (*Downstream, e
 	return res.(*Downstream), nil
 }
 
+// sessionAlive reports whether a cached downstream's subprocess is still
+// responsive. A nil session is a test stub and counts as alive. It's a var so
+// tests can simulate a dead subprocess.
+var sessionAlive = func(down *Downstream) bool {
+	if down.session == nil {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), livenessTimeout)
+	defer cancel()
+
+	return down.session.Ping(ctx, nil) == nil
+}
+
 // connect performs the MCP handshake and lists tools over the server's
 // transport: a spawned stdio subprocess for local servers, or streamable HTTP
 // for remote (URL) servers. It is a var so tests can stub it without spawning
-// real subprocesses.
-var connect = func(ctx context.Context, name string, srv ServerConfig) (*Downstream, error) {
-	connectCtx, cancel := context.WithTimeout(ctx, srv.Timeout.orDefault())
-	defer cancel()
-
-	transport, err := transportFor(ctx, srv.Server)
+// real subprocesses. The handshake is bounded by srv.Timeout; the subprocess
+// lifetime is not tied to any context (see transportFor).
+var connect = func(name string, srv ServerConfig) (*Downstream, error) {
+	transport, err := transportFor(context.Background(), srv.Server)
 	if err != nil {
 		return nil, fmt.Errorf("configuring transport for %q: %w", name, err)
 	}
+
+	connectCtx, cancel := context.WithTimeout(context.Background(), srv.Timeout.orDefault())
+	defer cancel()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-gateway", Version: "0.1.0"}, nil)
 
@@ -459,6 +494,9 @@ var connect = func(ctx context.Context, name string, srv ServerConfig) (*Downstr
 // the subprocess environment and as the resolution source for the remaining
 // values (command args, headers, oauth). This lets a header reference an
 // environment value that is itself computed by a {cmd:...}.
+//
+// The local subprocess is spawned with plain exec.Command, not bound to ctx, so
+// its lifetime is owned by Manager.Close.
 func transportFor(ctx context.Context, spec ServerSpec) (mcp.Transport, error) {
 	resolvedEnv, err := interpolateMap(ctx, spec.Environment, os.Environ())
 	if err != nil {
@@ -475,7 +513,7 @@ func transportFor(ctx context.Context, spec ServerSpec) (mcp.Transport, error) {
 		return nil, fmt.Errorf("resolving command: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = merged
 	return &mcp.CommandTransport{Command: cmd}, nil
 }

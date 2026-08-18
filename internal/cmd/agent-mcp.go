@@ -39,7 +39,7 @@ func runAgentMCP(cmd *cobra.Command, _ []string) error {
 	// server is first touched rather than at boot, so one broken downstream
 	// no longer blocks the whole gateway.
 	go func() {
-		if err := manager.Start(ctx); err != nil {
+		if err := manager.Start(); err != nil {
 			log.Printf("connecting downstream servers: %v", err)
 		}
 	}()

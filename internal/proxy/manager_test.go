@@ -183,7 +183,7 @@ func TestEnsureDedupesConcurrentConnects(t *testing.T) {
 	t.Cleanup(func() { connect = orig })
 
 	var connects atomic.Int32
-	connect = func(_ context.Context, name string, _ ServerConfig) (*Downstream, error) {
+	connect = func(name string, _ ServerConfig) (*Downstream, error) {
 		connects.Add(1)
 		time.Sleep(10 * time.Millisecond) // widen the race window
 		return &Downstream{name: name}, nil
@@ -196,7 +196,7 @@ func TestEnsureDedupesConcurrentConnects(t *testing.T) {
 	downs := make([]*Downstream, goroutines)
 	for i := range goroutines {
 		wg.Go(func() {
-			d, err := mgr.ensure(context.Background(), "srv")
+			d, err := mgr.ensure("srv")
 			if err != nil {
 				t.Errorf("ensure: %v", err)
 				return
@@ -213,5 +213,41 @@ func TestEnsureDedupesConcurrentConnects(t *testing.T) {
 		if d != downs[0] {
 			t.Fatalf("goroutine %d got a different downstream; cache/dedupe broken", i)
 		}
+	}
+}
+
+// TestEnsureReconnectsDeadSession verifies ensure evicts and reconnects a cached
+// downstream whose subprocess has died.
+func TestEnsureReconnectsDeadSession(t *testing.T) {
+	origConnect, origAlive := connect, sessionAlive
+	t.Cleanup(func() { connect = origConnect; sessionAlive = origAlive })
+
+	var connects atomic.Int32
+	connect = func(name string, _ ServerConfig) (*Downstream, error) {
+		connects.Add(1)
+		return &Downstream{name: name}, nil
+	}
+
+	// First liveness check reports dead (forcing a reconnect), then alive.
+	var checked atomic.Bool
+	sessionAlive = func(*Downstream) bool { return checked.Swap(true) }
+
+	mgr := NewManager(&Config{Servers: map[string]ServerConfig{"srv": {}}})
+
+	first, err := mgr.ensure("srv") // map empty → initial connect, no liveness check
+	if err != nil {
+		t.Fatalf("first ensure: %v", err)
+	}
+
+	second, err := mgr.ensure("srv") // cached but dead → evict + reconnect
+	if err != nil {
+		t.Fatalf("second ensure: %v", err)
+	}
+
+	if got := connects.Load(); got != 2 {
+		t.Fatalf("expected 2 connects (initial + reconnect), got %d", got)
+	}
+	if first == second {
+		t.Fatal("expected a fresh downstream after reconnecting a dead session")
 	}
 }
