@@ -183,18 +183,18 @@ func (manager *Manager) Search(ctx context.Context, queries []string, serverFilt
 		return nil, fmt.Errorf("limit %d exceeds the maximum of %d", limit, MaxSearchLimit)
 	}
 
-	if err := manager.ensureAll(); err != nil {
-		return nil, err
-	}
-
-	manager.lock.RLock()
-	defer manager.lock.RUnlock()
-
+	// Iterate config, not sessions: sessions omits not-yet-connected lazy servers.
 	var scored []toolScore
-	for name, down := range manager.sessions {
-		if serverFilter != "" && name != serverFilter {
+	for name, server := range manager.config.Servers {
+		if !server.isEnabled() || (serverFilter != "" && name != serverFilter) {
 			continue
 		}
+
+		down, err := manager.ensure(name)
+		if err != nil {
+			return nil, fmt.Errorf("error connecting to %q: %w", name, err)
+		}
+
 		scored = append(scored, scoreTools(name, down.tools, terms)...)
 	}
 
@@ -356,20 +356,6 @@ func (manager *Manager) Call(ctx context.Context, server, tool string, args any)
 		Name:      tool,
 		Arguments: args,
 	})
-}
-
-// ensureAll connects every enabled server not yet connected. Used by Search so
-// a broad query sees the full catalog even for lazy servers.
-func (manager *Manager) ensureAll() error {
-	for name, srv := range manager.config.Servers {
-		if !srv.isEnabled() {
-			continue
-		}
-		if _, err := manager.ensure(name); err != nil {
-			return fmt.Errorf("connecting %q: %w", name, err)
-		}
-	}
-	return nil
 }
 
 // livenessTimeout bounds the readiness ping ensure sends before reusing a
