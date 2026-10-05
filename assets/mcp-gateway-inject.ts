@@ -7,8 +7,6 @@
 //
 // Opt-out: MCP_GATEWAY_INJECT=false|0|no suppresses both injections.
 
-import { Plugin } from "@opencode/plugin";
-
 const INJECT_ENABLED = !["false", "0", "no"].includes(
   (process.env.MCP_GATEWAY_INJECT ?? "").toLowerCase(),
 );
@@ -51,7 +49,7 @@ async function renderServers(): Promise<string> {
   }
 }
 
-export default Plugin.define({
+export default {
   id: "mcp-gateway-inject",
   async setup(ctx) {
     await ctx.session.hook("context", async (event) => {
@@ -63,4 +61,4 @@ export default Plugin.define({
       if (serverList) event.system.push({ type: "text", text: serverList });
     });
   },
-});
+};
