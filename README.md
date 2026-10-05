@@ -134,8 +134,14 @@ Add the proxy to `opencode.json` and remove the now-fronted servers from its `mc
 
 ```jsonc
 "mcp": {
-  "mcp-gateway": { "type": "local", "command": ["mcp-gateway", "agent", "mcp"], "enabled": true }
+  "servers": {
+    "mcp-gateway": {
+      "type": "local",
+      "command": ["mcp-gateway", "agent", "mcp"],
+      "codemode": false
+    }
+  }
 }
 ```
 
-Then `mcp-gateway agent setup opencode` to install the injection plugin.
+`codemode: false` preserves direct `mcp_search`, `mcp_describe`, and `mcp_call` tools. Then run `mcp-gateway agent setup opencode` to install the injection plugin.
